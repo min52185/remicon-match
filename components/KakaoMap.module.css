@@ -1,0 +1,50 @@
+.box {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sharp);
+  overflow: hidden;
+  background: #e9e7e2;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* 키가 없을 때 쓰는 대체 지도 */
+.fallback {
+  position: absolute;
+  inset: 0;
+  background: #e9e7e2;
+}
+
+.fallbackNote {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  right: 10px;
+  z-index: 5;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--color-concrete-wet);
+  background: rgba(250, 250, 248, 0.92);
+  border: 1px dashed var(--color-rust-soft);
+  border-radius: var(--radius-sharp);
+  padding: 7px 10px;
+}
+
+.fallbackNote code {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--color-rust);
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  color: var(--color-concrete-mid);
+}

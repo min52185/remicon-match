@@ -1,0 +1,11 @@
+# 줄바꿈을 저장소에는 LF 로 통일한다.
+# 조원이 Windows·Mac 을 섞어 쓸 때 "고친 것도 없는데 전체 파일이 바뀜"으로 보이는 걸 막는다.
+* text=auto eol=lf
+
+# 바이너리는 건드리지 않는다
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.pdf binary

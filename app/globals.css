@@ -1,0 +1,420 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   레미go 디자인 토큰 — 콘크리트 무드
+   색은 전부 여기에서만 정한다. 화면 코드에 hex 를 쓰지 않는다.
+   ============================================================ */
+@theme {
+  --color-paper: #f4f2ee;
+  --color-card: #fafaf8;
+  --color-concrete-light: #c9c7c2;
+  --color-concrete-mid: #8e8c86;
+  --color-concrete-wet: #5b5c59;
+  --color-concrete-dark: #2e2e2c;
+  --color-rust: #8a5a3c;
+  --color-rust-soft: #b98a68;
+
+  /* 상태색 — 팔레트와 같은 채도대로 맞춘 흙색 계열 */
+  --color-ok: #4a6b4f;
+  --color-warn: #a8752c;
+  --color-bad: #9b3d33;
+  --color-info: #46617a;
+
+  --color-line: rgba(46, 46, 44, 0.12);
+  --color-line-strong: rgba(46, 46, 44, 0.28);
+
+  --font-sans: 'IBM Plex Sans KR', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --radius-sharp: 3px;
+  --ease-out-soft: cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-concrete-dark);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    word-break: keep-all;
+    -webkit-font-smoothing: antialiased;
+    /* 모바일 하단 탭바가 홈 인디케이터에 가리지 않게 */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  button {
+    font: inherit;
+  }
+
+  /* 숫자는 자릿수가 흔들리지 않게 */
+  .num,
+  time,
+  input[type='number'] {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* ---------- 레이아웃 ---------- */
+  .wrap {
+    width: 100%;
+    max-width: 1120px;
+    margin-inline: auto;
+    padding-inline: 20px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-concrete-mid);
+  }
+
+  /* ---------- 카드 ---------- */
+  .card {
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-sharp);
+  }
+
+  .card-pad {
+    padding: 16px;
+  }
+
+  /* ---------- 버튼 ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sharp);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background 0.18s var(--ease-out-soft),
+      border-color 0.18s var(--ease-out-soft),
+      color 0.18s var(--ease-out-soft);
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--color-concrete-dark);
+    color: var(--color-paper);
+  }
+
+  .btn-primary:not(:disabled):hover {
+    background: var(--color-rust);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--color-concrete-dark);
+    border-color: var(--color-line-strong);
+  }
+
+  .btn-outline:not(:disabled):hover {
+    border-color: var(--color-rust);
+    color: var(--color-rust);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-concrete-wet);
+  }
+
+  .btn-ghost:not(:disabled):hover {
+    color: var(--color-concrete-dark);
+  }
+
+  .btn-sm {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+  }
+
+  .btn-block {
+    width: 100%;
+  }
+
+  /* ---------- 입력 ---------- */
+  .field {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .field > .label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-concrete-wet);
+    margin-bottom: 6px;
+  }
+
+  .input,
+  .select {
+    width: 100%;
+    padding: 11px 12px;
+    background: var(--color-card);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sharp);
+    color: var(--color-concrete-dark);
+    font-size: 0.95rem;
+  }
+
+  .input:focus,
+  .select:focus {
+    outline: 2px solid var(--color-rust);
+    outline-offset: -1px;
+  }
+
+  /* 선택지 버튼 묶음 — 모바일에서 드롭다운보다 빠르다 */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .chip {
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sharp);
+    font-size: 0.88rem;
+    color: var(--color-concrete-wet);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out-soft);
+  }
+
+  .chip[aria-pressed='true'] {
+    background: var(--color-concrete-dark);
+    border-color: var(--color-concrete-dark);
+    color: var(--color-paper);
+    font-weight: 600;
+  }
+
+  /* ---------- 상태 배지 ---------- */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sharp);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid currentColor;
+  }
+
+  .tag-ok {
+    color: var(--color-ok);
+  }
+  .tag-warn {
+    color: var(--color-warn);
+  }
+  .tag-bad {
+    color: var(--color-bad);
+  }
+  .tag-info {
+    color: var(--color-info);
+  }
+  .tag-accent {
+    color: var(--color-rust);
+  }
+  .tag-muted {
+    color: var(--color-concrete-mid);
+  }
+
+  /* ---------- 표 ---------- */
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  .table th,
+  .table td {
+    padding: 9px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .table th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-concrete-mid);
+    white-space: nowrap;
+  }
+
+  .table td.num,
+  .table th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 화면 아래에 붙어 따라오는 주문 버튼 — 하단 탭바 위에 뜬다 */
+  .sticky-cta {
+    position: sticky;
+    bottom: 76px;
+    z-index: 40;
+    margin-top: 8px;
+    padding: 10px;
+    background: rgba(244, 242, 238, 0.94);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-sharp);
+    box-shadow: 0 4px 16px rgba(46, 46, 44, 0.12);
+  }
+
+  /* ---------- 가상 데이터 고지 (지시서 11장) ---------- */
+  .mock-notice {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(138, 90, 60, 0.06) 0 10px,
+      transparent 10px 20px
+    );
+    border: 1px dashed var(--color-rust-soft);
+    color: var(--color-rust);
+    font-size: 0.78rem;
+    padding: 8px 12px;
+    border-radius: var(--radius-sharp);
+  }
+}
+
+/* ============================================================
+   지도 마커.
+   카카오맵 CustomOverlay 는 DOM 을 직접 만들어 넣으므로 CSS 모듈로는 닿지 않는다.
+   그래서 전역 스타일시트인 여기에 둔다.
+   ============================================================ */
+.rmc-marker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 5px;
+  background: var(--color-card);
+  border: 1px solid var(--color-concrete-dark);
+  border-radius: var(--radius-sharp);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--color-concrete-dark);
+  box-shadow: 0 1px 4px rgba(46, 46, 44, 0.25);
+  cursor: default;
+}
+
+.rmc-marker[data-clickable='1'] {
+  cursor: pointer;
+}
+
+.rmc-marker[data-clickable='1']:hover {
+  border-color: var(--color-rust);
+}
+
+.rmc-marker .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--color-concrete-mid);
+}
+
+.rmc-marker[data-kind='site'] .dot {
+  background: var(--color-rust);
+  border-radius: 1px;
+}
+
+.rmc-marker[data-tone='ok'] .dot {
+  background: var(--color-ok);
+}
+.rmc-marker[data-tone='warn'] .dot {
+  background: var(--color-warn);
+}
+.rmc-marker[data-tone='bad'] .dot {
+  background: var(--color-bad);
+}
+.rmc-marker[data-tone='accent'] .dot {
+  background: var(--color-rust);
+}
+
+.rmc-marker[data-kind='truck'] {
+  background: var(--color-concrete-dark);
+  color: var(--color-paper);
+  border-color: var(--color-concrete-dark);
+  padding-left: 7px;
+}
+
+.rmc-marker[data-kind='truck'] .dot {
+  background: var(--color-paper);
+}
+
+.rmc-marker[data-selected='1'] {
+  border-color: var(--color-rust);
+  border-width: 2px;
+}
+
+/* ============================================================
+   인쇄 — 납품서만 남기고 화면 장치는 뺀다
+   ============================================================ */
+@media print {
+  .grain-overlay,
+  nav,
+  header,
+  button,
+  .mock-notice {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .card {
+    border-color: #999;
+    break-inside: avoid;
+  }
+}
+
+/* 종이 질감 — 화면 전체를 살짝 덮어 너무 깨끗해 보이지 않게 */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.035;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
