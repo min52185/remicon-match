@@ -86,7 +86,8 @@ function OrderCard({
   const poured = deliveries.filter((d) => d.completedAt).reduce((s, d) => s + d.volumeM3, 0);
 
   return (
-    <article className="card card-pad" style={{ padding: 12 }}>
+    // 인쇄할 때는 펼쳐 놓은 주문 한 건만 나가게 한다
+    <article className={`card card-pad ${open ? '' : 'no-print'}`} style={{ padding: 12 }}>
       <button
         type="button"
         onClick={onToggle}
@@ -131,7 +132,7 @@ function OrderCard({
       {order.status === 'requested' && (
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-sm no-print"
           style={{ marginTop: 8, paddingLeft: 0, color: 'var(--color-bad)' }}
           onClick={() => setOrderStatus(order.id, 'cancelled')}
         >
@@ -219,7 +220,7 @@ function OrderCard({
               </p>
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline btn-sm no-print"
                 style={{ marginTop: 12 }}
                 onClick={() => window.print()}
               >

@@ -36,8 +36,15 @@
   }
 
   html {
+    color-scheme: light;
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+  }
+
+  /* 키보드로 옮겨 다닐 때 어디에 있는지 보이게. 마우스 클릭에는 뜨지 않는다. */
+  :focus-visible {
+    outline: 2px solid var(--color-rust);
+    outline-offset: 2px;
   }
 
   body {
@@ -380,24 +387,34 @@
 }
 
 /* ============================================================
-   인쇄 — 납품서만 남기고 화면 장치는 뺀다
+   인쇄 — 납품서만 남기고 화면 장치는 뺀다.
+   요소 이름(header·nav·button)으로 숨기면 패널 제목까지 사라지므로,
+   숨길 것에 .no-print 를 직접 단다.
    ============================================================ */
 @media print {
-  .grain-overlay,
-  nav,
-  header,
-  button,
-  .mock-notice {
+  .no-print,
+  .grain-overlay {
     display: none !important;
   }
 
   body {
     background: #fff;
+    padding-bottom: 0;
   }
 
   .card {
     border-color: #999;
     break-inside: avoid;
+    margin-bottom: 10px;
+  }
+
+  .mock-notice {
+    background: none;
+    border-style: solid;
+  }
+
+  a[href]::after {
+    content: '';
   }
 }
 

@@ -41,7 +41,7 @@ export default function AppShell({
 
   return (
     <div className={s.shell}>
-      <header className={s.top}>
+      <header className={`${s.top} no-print`}>
         <div className={`wrap ${s.topInner}`}>
           <Link href="/" className={s.logo}>
             레미<span className={s.logoDot}>go</span>
@@ -63,7 +63,7 @@ export default function AppShell({
         </div>
       </main>
 
-      <nav className={s.tabs} aria-label="화면 이동">
+      <nav className={`${s.tabs} no-print`} aria-label="화면 이동">
         {tabs.map((t) => {
           const active = pathname === t.href || pathname.startsWith(`${t.href}/`);
           return (
@@ -97,7 +97,7 @@ function ClockBar() {
   const speed = mounted ? simClock.speed : 1;
 
   return (
-    <div className={s.clockBar}>
+    <div className={`${s.clockBar} no-print`}>
       <span className={s.clockNow}>{mounted ? clock(now) : '--:--'}</span>
       <span>시연 배속</span>
       <div className={s.speeds}>

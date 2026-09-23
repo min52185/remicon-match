@@ -11,6 +11,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Panel, Tag } from '@/components/ui';
+import { store } from '@/lib/store';
 import { SEED_PLANTS, SEED_SITES } from '@/lib/store/seed';
 import type { RouteResult } from '@/lib/services/route';
 import type { Temperature } from '@/lib/services/weather';
@@ -39,6 +40,8 @@ export default function SetupPage() {
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [temp, setTemp] = useState<Temperature | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [wiped, setWiped] = useState(false);
 
   useEffect(() => {
     fetch('/api/health')
@@ -314,6 +317,50 @@ export default function SetupPage() {
           필요합니다. 테이블 12개와 RLS 정책 SQL 은{' '}
           <code>supabase/migrations/0001_init.sql</code> 에 이미 있습니다.
         </p>
+      </Panel>
+
+      {/* 5. 시연 데이터 */}
+      <Panel title="5. 시연 데이터">
+        <p style={{ fontSize: '0.86rem', color: 'var(--color-concrete-wet)', margin: '0 0 12px' }}>
+          주문·배차·납품서·즐겨찾기는 이 브라우저에만 저장됩니다. 발표 리허설을 다시 하려면
+          비우고 시작하세요. 공장 12곳과 현장 3곳은 초기값으로 되돌아갑니다.
+        </p>
+
+        {wiped ? (
+          <Tag tone="ok">초기화했습니다 — 화면을 새로고침하세요</Tag>
+        ) : confirming ? (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.86rem', color: 'var(--color-bad)' }}>
+              지금까지 만든 주문·납품서·즐겨찾기가 모두 사라집니다. 정말 비울까요?
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                store.reset();
+                setConfirming(false);
+                setWiped(true);
+              }}
+            >
+              비우기
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setConfirming(false)}
+            >
+              취소
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => setConfirming(true)}
+          >
+            시연 데이터 비우기
+          </button>
+        )}
       </Panel>
 
       <p style={{ fontSize: '0.85rem', marginTop: 24 }}>
