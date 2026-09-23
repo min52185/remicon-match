@@ -415,7 +415,8 @@ function Guide({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-const listStyle: React.CSSProperties = { margin: 0, paddingLeft: 18 };
+// Tailwind preflight 이 ol/ul 의 번호·점을 지우므로 필요한 곳에서 되살린다
+const listStyle: React.CSSProperties = { margin: 0, paddingLeft: 20, listStyleType: 'decimal' };
 
 const resultBox: React.CSSProperties = {
   marginTop: 12,

@@ -429,7 +429,14 @@ function AllocateBody({ site }: { site: Site }) {
                 <summary style={{ cursor: 'pointer', color: 'var(--color-concrete-wet)' }}>
                   제외된 공장 {result.excluded.length}곳
                 </summary>
-                <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: 'var(--color-concrete-wet)' }}>
+                <ul
+                  style={{
+                    margin: '8px 0 0',
+                    paddingLeft: 20,
+                    listStyleType: 'disc',
+                    color: 'var(--color-concrete-wet)',
+                  }}
+                >
                   {result.excluded.map((e) => (
                     <li key={e.plantId}>
                       {e.plantName} — {e.reason}
