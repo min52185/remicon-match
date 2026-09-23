@@ -42,9 +42,15 @@ npm test
 | `KMA_SERVICE_KEY` | 서버 — 기상청 단기예보 | 평년값 근사 |
 | `NEXT_PUBLIC_SUPABASE_*` | 4단계에서 사용 | 브라우저 저장소로 동작 |
 
-카카오맵은 키를 넣는 것만으로는 안 뜹니다. Kakao Developers 에서
-**제품 설정 → 카카오맵 활성화 ON** 과 **플랫폼 키 → JavaScript SDK 도메인**에
-`http://localhost:3000` 과 Vercel 주소를 등록해야 합니다.
+카카오맵은 키를 넣는 것만으로는 안 뜹니다. Kakao Developers 앱 관리 페이지에서 둘 다 해야 합니다.
+
+1. **[카카오맵] > [사용 설정]** 의 **[상태]** 를 **ON**
+2. **[앱] > [플랫폼 키]** → **JavaScript 키** 를 눌러 **[키 설정]** → **JavaScript SDK 도메인** 에
+   `http://localhost:3000` 과 Vercel 주소를 등록
+
+> 2026년 7월 21일 개편으로 예전의 **[앱 설정] > [플랫폼]** 메뉴는 없어졌습니다. 도메인은 이제
+> 「플랫폼」이 아니라 **JavaScript 키 자체의 설정**에 등록합니다. 도메인이 맞지 않으면
+> `invalid ... web_site_url` 오류가 납니다.
 
 키를 넣은 뒤에는 **<http://localhost:3000/setup>** 에서 눌러서 확인하세요.
 어느 키가 비었는지, 길찾기·기상청이 실제로 응답하는지, 지도 SDK 가 정말 떴는지를

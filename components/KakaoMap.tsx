@@ -269,8 +269,10 @@ function FallbackMap({
           <>
             카카오맵 키가 없어 <strong>대체 지도</strong>로 표시했습니다. 실제 지도를 쓰려면{' '}
             <code>.env.local</code> 에 <code>NEXT_PUBLIC_KAKAO_JS_KEY</code> 를 넣고, 카카오
-            Developers 에서 <strong>카카오맵 활성화 ON</strong> 과 도메인 등록(
-            <code>http://localhost:3000</code>)을 하세요. (지시서 0-10)
+            Developers 에서 <strong>[카카오맵] &gt; [사용 설정] 상태 ON</strong> 과{' '}
+            <strong>[앱] &gt; [플랫폼 키] → JavaScript 키 → JavaScript SDK 도메인</strong> 등록(
+            <code>http://localhost:3000</code>)을 하세요. 자세한 순서는 <code>/setup</code> 에
+            있습니다.
           </>
         ) : (
           <>

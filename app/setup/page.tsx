@@ -156,7 +156,10 @@ export default function SetupPage() {
                 로그인 → 내 애플리케이션 → 애플리케이션 추가하기 (앱은 <strong>한 개만</strong>{' '}
                 만듭니다. 무료 제공량이 첫 앱에만 주어집니다)
               </li>
-              <li>앱 설정 → 플랫폼 키 → <strong>JavaScript 키</strong> 복사</li>
+              <li>
+                앱 화면 왼쪽 <strong>[앱] &gt; [플랫폼 키]</strong> → <strong>JavaScript 키</strong>{' '}
+                값을 복사 (「플랫폼」 메뉴는 2026-07-21 개편으로 없어졌습니다)
+              </li>
               <li>
                 <code>.env.local</code> 의 <code>NEXT_PUBLIC_KAKAO_JS_KEY=</code> 뒤에 붙여넣기
               </li>
@@ -169,12 +172,14 @@ export default function SetupPage() {
           <Guide title="키는 있는데 지도가 안 뜹니다 — 두 가지를 확인하세요">
             <ol style={listStyle}>
               <li>
-                <strong>제품 설정 → 카카오맵 → 활성화 설정 ON.</strong> 이걸 안 켜면 키가 맞아도
-                지도가 뜨지 않습니다.
+                <strong>[카카오맵] &gt; [사용 설정] 의 [상태] 를 ON.</strong> 이걸 안 켜면 키가
+                맞아도 지도가 뜨지 않습니다.
               </li>
               <li>
-                <strong>앱 설정 → 플랫폼 키 → JavaScript SDK 도메인</strong>에{' '}
-                <code>http://localhost:3000</code> 과 Vercel 주소를 둘 다 등록.
+                <strong>[앱] &gt; [플랫폼 키] → JavaScript 키를 눌러 [키 설정]</strong> 으로 들어가{' '}
+                <strong>JavaScript SDK 도메인</strong> 에 <code>http://localhost:3000</code> 과
+                Vercel 주소를 둘 다 등록. 도메인이 틀리면{' '}
+                <code>invalid ... web_site_url</code> 오류가 납니다.
               </li>
             </ol>
             <p style={{ margin: '8px 0 0' }}>
