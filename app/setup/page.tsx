@@ -10,8 +10,11 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Panel, Tag } from '@/components/ui';
-import { store } from '@/lib/store';
+import { Panel, Row, Tag } from '@/components/ui';
+import { useAuth } from '@/lib/auth';
+import { ROLE_LABEL } from '@/lib/routes';
+import { useDb } from '@/lib/store/hooks';
+import { store, storeMode } from '@/lib/store';
 import { SEED_PLANTS, SEED_SITES } from '@/lib/store/seed';
 import type { RouteResult } from '@/lib/services/route';
 import type { Temperature } from '@/lib/services/weather';
@@ -324,14 +327,25 @@ export default function SetupPage() {
         </p>
       </Panel>
 
-      {/* 5. 시연 데이터 */}
-      <Panel title="5. 시연 데이터">
-        <p style={{ fontSize: '0.86rem', color: 'var(--color-concrete-wet)', margin: '0 0 12px' }}>
-          주문·배차·납품서·즐겨찾기는 이 브라우저에만 저장됩니다. 발표 리허설을 다시 하려면
-          비우고 시작하세요. 공장 12곳과 현장 3곳은 초기값으로 되돌아갑니다.
-        </p>
+      {/* 5. 로그인 상태와 읽어온 자료 */}
+      <LoginStatus />
 
-        {wiped ? (
+      {/* 6. 시연 데이터 */}
+      <Panel title="6. 시연 데이터">
+        {storeMode === 'supabase' ? (
+          <p style={{ fontSize: '0.86rem', color: 'var(--color-concrete-wet)', margin: 0 }}>
+            지금은 <strong>Supabase 공유 저장소</strong>를 씁니다. 주문·배차·납품서가 모든 기기에
+            같이 보이므로, 화면에서 함부로 지우지 않습니다. 리허설을 다시 하려면 Supabase 대시보드{' '}
+            <strong>Table Editor</strong> 에서 <code>deliveries</code> → <code>orders</code> 순으로
+            행을 지우세요 (배송이 주문을 참조하므로 순서가 중요합니다).
+          </p>
+        ) : (
+          <>
+            <p style={{ fontSize: '0.86rem', color: 'var(--color-concrete-wet)', margin: '0 0 12px' }}>
+              주문·배차·납품서·즐겨찾기는 이 브라우저에만 저장됩니다. 발표 리허설을 다시 하려면
+              비우고 시작하세요. 공장 12곳과 현장 3곳은 초기값으로 되돌아갑니다.
+            </p>
+            {wiped ? (
           <Tag tone="ok">초기화했습니다 — 화면을 새로고침하세요</Tag>
         ) : confirming ? (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -357,14 +371,16 @@ export default function SetupPage() {
               취소
             </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={() => setConfirming(true)}
-          >
-            시연 데이터 비우기
-          </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setConfirming(true)}
+              >
+                시연 데이터 비우기
+              </button>
+            )}
+          </>
         )}
       </Panel>
 
@@ -430,3 +446,85 @@ const resultBox: React.CSSProperties = {
   border: '1px solid var(--color-line)',
   borderRadius: 'var(--radius-sharp)',
 };
+
+/* ==========================================================================
+ * 5. 로그인 상태 — 계정을 만든 뒤 여기 한 화면으로 전부 확인한다
+ * ======================================================================== */
+
+function LoginStatus() {
+  const { demoMode, loading, profile } = useAuth();
+  const db = useDb();
+
+  if (demoMode) {
+    return (
+      <Panel title="5. 로그인 상태" aside={<Tag tone="muted">시연 모드</Tag>}>
+        <p style={{ fontSize: '0.86rem', margin: 0, color: 'var(--color-concrete-wet)' }}>
+          Supabase 키가 없어 로그인 없이 돕니다. 데이터는 이 브라우저에만 저장됩니다.
+        </p>
+      </Panel>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Panel title="5. 로그인 상태" aside={<Tag tone="muted">확인 중…</Tag>}>
+        <p style={{ fontSize: '0.86rem', margin: 0 }}>세션을 확인하는 중입니다…</p>
+      </Panel>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <Panel title="5. 로그인 상태" aside={<Tag tone="warn">로그인 안 됨</Tag>}>
+        <p style={{ fontSize: '0.86rem', margin: '0 0 12px' }}>
+          로그인하면 내 역할·소속과, 그 계정으로 실제 읽히는 자료의 개수가 여기에 나옵니다.
+        </p>
+        <Link href="/login" className="btn btn-outline btn-sm">
+          로그인하러 가기
+        </Link>
+      </Panel>
+    );
+  }
+
+  const counts: [string, number, number][] = [
+    ['현장', db.sites.length, 1],
+    ['공장', db.plants.length, 1],
+    ['차량', db.trucks.length, 1],
+    ['주문', db.orders.length, 0],
+    ['배송', db.deliveries.length, 0],
+    ['즐겨찾기', db.favoriteMixes.length, 0],
+  ];
+
+  return (
+    <Panel
+      title="5. 로그인 상태"
+      aside={db.loaded ? <Tag tone="ok">연결됨</Tag> : <Tag tone="muted">읽는 중…</Tag>}
+    >
+      <div style={{ fontSize: '0.88rem', marginBottom: 14 }}>
+        <Row label="이름">{profile.name}</Row>
+        <Row label="역할">{ROLE_LABEL[profile.role]}</Row>
+        <Row label="소속">{profile.companyId ? '지정됨' : '없음 — 다시 골라야 합니다'}</Row>
+      </div>
+
+      <p style={{ fontSize: '0.84rem', color: 'var(--color-concrete-wet)', margin: '0 0 10px' }}>
+        이 계정으로 <strong>실제로 읽히는</strong> 자료입니다. RLS 가 걸러낸 뒤의 숫자라, 역할에
+        따라 달라지는 것이 정상입니다.
+      </p>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {counts.map(([label, n, min]) => (
+          <span key={label} className={`tag tag-${n >= min ? (n > 0 ? 'ok' : 'muted') : 'bad'}`}>
+            {label} {n}
+          </span>
+        ))}
+      </div>
+
+      {db.loaded && db.plants.length === 0 && (
+        <p style={{ fontSize: '0.84rem', color: 'var(--color-bad)', margin: '12px 0 0' }}>
+          공장이 0개입니다. Supabase SQL Editor 에서 <code>0002_seed.sql</code> 을 실행했는지
+          확인하세요.
+        </p>
+      )}
+    </Panel>
+  );
+}
