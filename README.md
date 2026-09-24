@@ -18,9 +18,9 @@ npm install
 npm run dev
 ```
 
-브라우저에서 <http://localhost:3000> 을 엽니다. **API 키가 하나도 없어도 전부 동작합니다.**
-키가 없으면 지도는 대체 지도로, 이동시간은 직선거리 근사로, 외기온도는 평년값으로 떨어지고,
-화면에 어느 쪽을 쓰고 있는지 표시됩니다.
+<http://localhost:3000> 을 엽니다. **키가 하나도 없어도 전부 동작합니다.**
+키가 없으면 로그인 없이 도는 **시연 모드**가 되고, 지도는 대체 지도로, 이동시간은
+직선거리 근사로, 외기온도는 평년값으로 떨어집니다. 화면에 어느 쪽인지 표시됩니다.
 
 테스트:
 
@@ -31,9 +31,14 @@ npm test
 `tests/allocate.test.ts` 가 지시서 6장의 A~G 예시를 고정합니다
 (**A5·B4·C10·D5·E12·F14·G0**, 이동시간 합 1605분).
 
+> **`npm run build` 전에는 개발 서버를 끄세요(Ctrl+C).** 둘 다 `.next` 폴더를 쓰기 때문에,
+> 켜 둔 채 빌드하면 캐시가 깨져 `Cannot find module` 오류가 납니다. 이미 깨졌다면 `.next` 폴더를
+> 지우고 `npm run dev` 를 다시 켜면 됩니다.
+> (`distDir` 을 바꾸면 Vercel 배포가 실패하므로 기본값 `.next` 를 그대로 씁니다.)
+
 ---
 
-## 2. 키 넣기 (지시서 0-10 ~ 0-12)
+## 2. 키 넣기
 
 `.env.local.example` 을 `.env.local` 로 복사하고 값을 채웁니다.
 `.env.local` 은 `.gitignore` 에 있으므로 GitHub 에 올라가지 않습니다.
@@ -41,23 +46,39 @@ npm test
 | 변수 | 쓰는 곳 | 없으면 |
 | --- | --- | --- |
 | `NEXT_PUBLIC_KAKAO_JS_KEY` | 브라우저 — 카카오맵 표시 | 대체 지도(좌표 평면)로 표시 |
-| `KAKAO_REST_API_KEY` | 서버 — 길찾기·미래 운행 정보 | 직선거리 × 1.35 근사 |
+| `KAKAO_REST_API_KEY` | 서버 — 길찾기(실시간 교통) | 직선거리 × 1.35 근사 |
 | `KMA_SERVICE_KEY` | 서버 — 기상청 단기예보 | 평년값 근사 |
-| `NEXT_PUBLIC_SUPABASE_*` | 4단계에서 사용 | 브라우저 저장소로 동작 |
+| `NEXT_PUBLIC_SUPABASE_URL` | 공유 DB | 브라우저 저장소로 동작 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 공유 DB | 〃 |
 
-카카오맵은 키를 넣는 것만으로는 안 뜹니다. Kakao Developers 앱 관리 페이지에서 둘 다 해야 합니다.
+> `SUPABASE_SERVICE_ROLE_KEY` 는 **넣지 않습니다.** RLS 를 통째로 무시하는 키라
+> 넣는 순간 아래 권한 규칙이 전부 무력화됩니다. 이 앱은 anon 키 + RLS 만으로 돕니다.
+> anon 키가 브라우저에 노출되는 것은 정상이고, 보호는 RLS 가 합니다.
+
+### 카카오맵 (지시서 0-10)
+
+키를 넣는 것만으로는 안 뜹니다. Kakao Developers 앱 관리 페이지에서 둘 다 해야 합니다.
 
 1. **[카카오맵] > [사용 설정]** 의 **[상태]** 를 **ON**
 2. **[앱] > [플랫폼 키]** → **JavaScript 키** 를 눌러 **[키 설정]** → **JavaScript SDK 도메인** 에
    `http://localhost:3000` 과 Vercel 주소를 등록
 
 > 2026년 7월 21일 개편으로 예전의 **[앱 설정] > [플랫폼]** 메뉴는 없어졌습니다. 도메인은 이제
-> 「플랫폼」이 아니라 **JavaScript 키 자체의 설정**에 등록합니다. 도메인이 맞지 않으면
-> `invalid ... web_site_url` 오류가 납니다.
+> 「플랫폼」이 아니라 **JavaScript 키 자체의 설정**에 등록합니다.
 
-키를 넣은 뒤에는 **<http://localhost:3000/setup>** 에서 눌러서 확인하세요.
-어느 키가 비었는지, 길찾기·기상청이 실제로 응답하는지, 지도 SDK 가 정말 떴는지를
-한 화면에서 알려 줍니다. **키를 고쳤으면 개발 서버를 껐다 켜야 반영됩니다.**
+### Supabase (지시서 0-8)
+
+1. <https://supabase.com> → 프로젝트 생성 (Region: **Northeast Asia (Seoul)**)
+2. **SQL Editor** 에서 `supabase/migrations/0001_init.sql` 실행 → 이어서 `0002_seed.sql` 실행
+   마지막에 **회사 13 / 현장 3 / 공장 12 / 출하현황 12 / 차량 139** 가 나오면 성공
+3. **Authentication → Sign In / Providers → User Signups** 에서 **Confirm email 끄기**
+   (가상 이메일로 계정을 만들 것이라 인증 메일을 받을 수 없습니다)
+4. **Settings → API Keys** 에서 Project URL 과 anon 키를 `.env.local` 에 넣고 서버 재시작
+
+**키를 넣은 뒤에는 <http://localhost:3000/setup> 에서 눌러서 확인하세요.**
+어느 키가 비었는지, 길찾기·기상청이 실제로 응답하는지, 지도 SDK 가 정말 떴는지,
+로그인한 계정으로 몇 행이 읽히는지를 한 화면에서 알려 줍니다.
+**키를 고쳤으면 개발 서버를 껐다 켜야 반영됩니다.**
 
 ---
 
@@ -66,6 +87,8 @@ npm test
 | 역할 | 주소 | 하는 일 |
 | --- | --- | --- |
 | 랜딩 | `/` | 소개 · 역할 고르기 |
+| 공통 | `/login` | 로그인 · 회원가입 · 소속 고르기 |
+| 공통 | `/setup` | 키 연결 점검 · 로그인 상태 진단 |
 | 현장 | `/site/order` | 사양 고르기 → 주문 가능 공장 → 주문 |
 | 현장 | `/site/favorites` | ★ 자주 쓰는 배합 저장·불러오기 |
 | 현장 | `/site/allocate` | ★ AI 공장 배분 — 공장별 대수·출하 시각표 |
@@ -75,28 +98,34 @@ npm test
 | 레미콘사 | `/plant/orders` | 주문 수락 / 사유 달아 거절 |
 | 레미콘사 | `/plant/dispatch` | 차량 배차 · 출하 지시(비비기 시작 기록) |
 | 기사 | `/driver` | ★ 운행 시작(GPS 전송) · 도착 · 하역 완료 |
-| 공통 | `/setup` | 키 연결 점검 · 시연 데이터 비우기 |
 
 ★ = 프로토타입 A 에 없던 기능.
 
-### 시연하는 법 (키 없이)
+### 시연 계정
 
-브라우저 탭 세 개를 나란히 띄웁니다. 같은 브라우저면 데이터가 공유됩니다.
+| 이메일 | 역할 | 소속 |
+| --- | --- | --- |
+| `site@test.com` | 현장 | 한빛건설 |
+| `plant@test.com` | 레미콘사 | 가온레미콘 |
+| `driver@test.com` | 기사 | 가온레미콘 |
 
-1. `/site/allocate` — 총 물량 300m³ → **AI 배분 계산하기** → **주문 한 번에 보내기**
-2. `/plant/orders` — 상단에서 공장을 고르고 **수락**
-3. `/plant/dispatch` — 차량을 고르고 **출하 지시**
-4. `/site/tracking` — 시연 배속을 **×60** 이상으로 올리면 차가 움직이고 ETA·지연이 갱신됨
+로그인하면 **내 회사 것만** 보입니다. 현장 계정으로 `/plant` 에 들어가면 막힙니다.
+
+### 시연 순서
+
+기기(또는 브라우저 창) 두세 개를 나란히 띄우고 각각 다른 계정으로 로그인합니다.
+
+1. **현장** `/site/allocate` — 총 물량 300m³ → **AI 배분 계산하기** → **주문 한 번에 보내기**
+2. **레미콘사** `/plant/orders` — 새 주문이 **실시간으로** 뜸 → **수락**
+3. **레미콘사** `/plant/dispatch` — 차량을 고르고 **출하 지시**
+4. **현장** `/site/tracking` — 시연 배속을 **×60** 이상으로 올리면 차가 움직이고 ETA·지연이 갱신됨
+5. **기사** `/driver` — **운행 시작** 을 누르면 실제 GPS 가 현장 지도에 뜸
 
 `/site/allocate` 의 **"지시서 6장 A~G 예시로 계산"** 을 켜면 발표용 예시가 그대로 재현됩니다.
 단순 방식이 몇 번째 차에서 끊기는지와 AI 배분이 끝까지 채우는 것을 나란히 보여 줍니다.
 
-리허설을 다시 하려면 `/setup` 맨 아래 **시연 데이터 비우기**를 누릅니다.
-
-> **`npm run build` 전에는 개발 서버를 끄세요(Ctrl+C).** 둘 다 `.next` 폴더를 쓰기 때문에,
-> 켜 둔 채 빌드하면 캐시가 깨져 `Cannot find module` 오류가 납니다. 이미 깨졌다면 `.next` 폴더를
-> 지우고 `npm run dev` 를 다시 켜면 됩니다.
-> (`distDir` 을 바꾸면 Vercel 배포가 실패하므로 기본값 `.next` 를 그대로 씁니다.)
+> 리허설을 다시 하려면 Supabase **Table Editor** 에서 `deliveries` → `orders` 순으로 행을
+> 지웁니다(배송이 주문을 참조하므로 순서가 중요합니다).
 
 ---
 
@@ -105,19 +134,28 @@ npm test
 ```
 app/
   page.tsx              랜딩 (레미go)
+  login/                로그인·회원가입·소속 고르기
+  setup/                설정 점검
   site/ plant/ driver/  역할별 화면
   api/route             카카오모빌리티 길찾기 프록시 (REST 키는 여기서만)
   api/weather           기상청 단기예보 프록시
   api/ai/allocate       AI 배분
+  api/health            키가 들어와 있는지만 알려 준다 (값은 절대 안 내보냄)
 lib/
   rules.ts              시방·KS F 4009 규칙 — 숫자는 전부 여기 상수로만
   types.ts              지시서 4장 테이블과 1:1
+  auth.tsx              세션과 내 프로필
   services/             clock · route · weather · tracking (가짜 구현과 교체 가능)
-  store/                데이터 — 지금은 localStorage, 나중에 Supabase
+  store/
+    shared.ts           두 구현이 함께 쓰는 타입·조회 함수
+    local.ts            브라우저 저장소
+    remote.ts           Supabase + Realtime
+    index.ts            키가 있으면 remote, 없으면 local
+  supabase/             클라이언트와 DB↔앱 변환기
   ai/allocate.ts        배분 최적화
   ai/predict.ts         지연 예측 · 콜드조인트 경고
 components/             KakaoMap · SpecPicker · 역할 껍데기 등
-supabase/migrations/    0001_init.sql — 테이블 12개 + RLS
+supabase/migrations/    0001_init.sql(스키마+RLS) · 0002_seed.sql(시연 데이터)
 docs/prototype-a.html   기존 프로토타입 (참고용, 고치지 않음)
 tests/                  vitest
 ```
@@ -149,21 +187,37 @@ tests/                  vitest
 
 ---
 
-## 6. 아직 안 한 것
+## 6. 권한 (RLS)
+
+`supabase/migrations/0001_init.sql` 이 12개 테이블 전부에 Row Level Security 를 겁니다.
+
+- 현장 계정은 **자기 회사 현장의** 주문·즐겨찾기·배분 계획만
+- 공장 계정은 **자기 공장으로 온** 주문과 자기가 만든 배송만
+- 기사는 **자기 차량의** 배송만, GPS 는 자기 배송에만 쓸 수 있음
+- 공장·현장 목록은 로그인 사용자 모두에게 열려 있음 (주문하려면 공장을 찾아야 하므로)
+
+회원가입하면 DB 트리거(`handle_new_user`)가 `profiles` 행을 자동으로 만듭니다.
+이게 없으면 `my_company_id()` 가 null 이 되어 **모든 RLS 가 막힙니다.**
+
+로그인하지 않은 상태에서 공장 목록을 조회하면 0건이 돌아오는 것이 정상입니다.
+
+---
+
+## 7. 아직 안 한 것
 
 | 항목 | 지금 | 해야 할 것 |
 | --- | --- | --- |
-| 로그인 | 없음 (상단에서 역할·현장 전환) | Supabase Auth + RLS (`supabase/migrations/0001_init.sql` 준비됨) |
-| 데이터 공유 | 브라우저 저장소 — 다른 휴대폰끼리 공유 안 됨 | Supabase + Realtime |
 | 지연 예측 | 1·2단계 (규칙 기반 + 카카오 traffic_state) | 3단계 학습 보정 — 운행 기록 수백 건 필요 |
 | 이어치기 허용값 | 보조 자료 기준 (25℃ 초과 120분 / 이하 150분) | **KCS 14 20 10 원문으로 확인 후 확정** |
 | 트럭 경로 | 카카오 `car_type=7`(대형화물) | 높이·중량 제한, 실제 운행 기록으로 보정계수 갱신 |
+| 기사 이름 표시 | `미배정`/`기사` 로만 표시 | `profiles` 읽기 정책을 같은 회사까지 넓혀야 함 |
+| 기사 차량 배정 | 미구현 | 기사가 빈 차량을 고르는 화면 (RLS 정책은 준비됨) |
 
 `lib/rules.ts` 의 `RULES` 와 `// [가정]` 주석이 붙은 값은 전부 팀이 정해야 하는 값입니다.
 
 ---
 
-## 7. 알아 둘 것
+## 8. 알아 둘 것
 
 - 공장·현장·차량 데이터는 **전부 가상**입니다. 실제 업체명·로고는 쓰지 않습니다.
 - 카카오모빌리티는 상업 목적이면 무료 제공량 안이라도 사전 제휴 계약이 필요합니다.
