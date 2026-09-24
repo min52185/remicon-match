@@ -1,0 +1,149 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-card);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sharp);
+  padding: 28px 24px;
+}
+
+.logo {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-concrete-dark);
+  text-decoration: none;
+  margin-bottom: 22px;
+}
+
+.logoDot {
+  color: var(--color-rust);
+}
+
+.title {
+  font-size: 1.25rem;
+  margin-bottom: 10px;
+}
+
+.muted {
+  color: var(--color-concrete-wet);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.muted a {
+  color: var(--color-rust);
+}
+
+/* ---------- 로그인 / 회원가입 전환 ---------- */
+.tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.tab,
+.tabOn {
+  flex: 1;
+  padding: 10px 0 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 0.95rem;
+  color: var(--color-concrete-mid);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tabOn {
+  color: var(--color-concrete-dark);
+  font-weight: 700;
+  border-bottom-color: var(--color-rust);
+}
+
+/* ---------- 역할 고르기 ---------- */
+.roles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.roleCard {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sharp);
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out-soft);
+}
+
+.roleCard strong {
+  font-size: 0.92rem;
+}
+
+.roleCard span {
+  font-size: 0.78rem;
+  color: var(--color-concrete-mid);
+}
+
+.roleCard[aria-pressed='true'] {
+  background: var(--color-concrete-dark);
+  border-color: var(--color-concrete-dark);
+}
+
+.roleCard[aria-pressed='true'] strong {
+  color: var(--color-paper);
+}
+
+.roleCard[aria-pressed='true'] span {
+  color: var(--color-concrete-light);
+}
+
+/* ---------- 알림 ---------- */
+.error,
+.notice {
+  font-size: 0.84rem;
+  line-height: 1.55;
+  padding: 9px 11px;
+  border-radius: var(--radius-sharp);
+  margin: 0 0 14px;
+}
+
+.error {
+  color: var(--color-bad);
+  border: 1px solid currentColor;
+}
+
+.notice {
+  color: var(--color-ok);
+  border: 1px solid currentColor;
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: var(--color-concrete-mid);
+  line-height: 1.6;
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-line);
+}
+
+.hint code {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-rust);
+}
