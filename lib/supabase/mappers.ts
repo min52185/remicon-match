@@ -166,6 +166,7 @@ export interface ProfileRow {
 
 export const toSite = (r: SiteRow): Site => ({
   id: r.id,
+  companyId: r.company_id ?? undefined,
   name: r.name,
   address: r.address,
   lat: r.lat,
@@ -177,6 +178,7 @@ export const toSite = (r: SiteRow): Site => ({
 export function toPlant(r: PlantRow, status?: PlantStatusRow): Plant {
   return {
     id: r.id,
+    companyId: r.company_id ?? undefined,
     name: r.name,
     address: r.address,
     lat: r.lat,

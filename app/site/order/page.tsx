@@ -14,7 +14,7 @@ import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
-import { duration, fromLocalInput, m3, toLocalInput } from '@/lib/format';
+import { duration, failure, fromLocalInput, m3, toLocalInput } from '@/lib/format';
 import {
   DEFAULT_POUR_SETTINGS,
   DEFAULT_SPEC,
@@ -66,6 +66,8 @@ function OrderBody({ site }: { site: Site }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [placed, setPlaced] = useState<Order | null>(null);
   const [favAlias, setFavAlias] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // 마운트 뒤에 시각을 정한다 (서버·클라이언트 시각이 달라 생기는 경고 방지)
   useEffect(() => {
@@ -143,33 +145,45 @@ function OrderBody({ site }: { site: Site }) {
 
   const paths = selected?.route ? [{ id: 'sel', points: selected.route.path, emphasis: true }] : [];
 
-  function order() {
+  async function order() {
     if (!selected || tempC == null) return;
-    const o = createOrder({
-      siteId: site.id,
-      plantId: selected.plant.id,
-      spec,
-      volumeM3,
-      pourStartAt,
-      pumpRate,
-      tempC,
-    });
-    setPlaced(o);
-    setFavAlias('');
+    setSending(true);
+    setSendError(null);
+    try {
+      const o = await createOrder({
+        siteId: site.id,
+        plantId: selected.plant.id,
+        spec,
+        volumeM3,
+        pourStartAt,
+        pumpRate,
+        tempC,
+      });
+      setPlaced(o);
+      setFavAlias('');
+    } catch (e) {
+      setSendError(failure(e, '주문을 보내지 못했습니다.'));
+    } finally {
+      setSending(false);
+    }
   }
 
-  function keepAsFavorite() {
+  async function keepAsFavorite() {
     if (!placed) return;
-    saveFavorite({
-      siteId: site.id,
-      alias: favAlias.trim() || specText(spec),
-      spec,
-      volumeM3,
-      pumpRate,
-      preferredPlantId: placed.plantId,
-    });
-    setFavAlias('');
-    setPlaced(null);
+    try {
+      await saveFavorite({
+        siteId: site.id,
+        alias: favAlias.trim() || specText(spec),
+        spec,
+        volumeM3,
+        pumpRate,
+        preferredPlantId: placed.plantId,
+      });
+      setFavAlias('');
+      setPlaced(null);
+    } catch (e) {
+      setSendError(failure(e, '즐겨찾기를 저장하지 못했습니다.'));
+    }
   }
 
   const favorites = favoritesOfSite(db, site.id);
@@ -201,7 +215,7 @@ function OrderBody({ site }: { site: Site }) {
               value={favAlias}
               onChange={(e) => setFavAlias(e.target.value)}
             />
-            <button type="button" className="btn btn-primary btn-sm" onClick={keepAsFavorite}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => void keepAsFavorite()}>
               즐겨찾기에 저장
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPlaced(null)}>
@@ -237,7 +251,7 @@ function OrderBody({ site }: { site: Site }) {
                   setVolumeM3(f.volumeM3);
                   setPumpRate(f.pumpRate);
                   if (f.preferredPlantId) setSelectedId(f.preferredPlantId);
-                  bumpFavorite(f.id);
+                  void bumpFavorite(f.id);
                 }}
               >
                 <strong style={{ display: 'block', fontSize: '0.92rem' }}>{f.alias}</strong>
@@ -383,15 +397,20 @@ function OrderBody({ site }: { site: Site }) {
 
       {/* 주문 */}
       <div className="sticky-cta">
+        {sendError && (
+          <p style={{ fontSize: '0.82rem', color: 'var(--color-bad)', margin: '0 0 8px' }}>{sendError}</p>
+        )}
         <button
           type="button"
           className="btn btn-primary btn-block"
-          disabled={!selected || selected.level === 'bad' || tempC == null}
-          onClick={order}
+          disabled={!selected || selected.level === 'bad' || tempC == null || sending}
+          onClick={() => void order()}
         >
-          {selected
-            ? `${selected.plant.name}에 ${m3(volumeM3)} 주문하기`
-            : '공장을 골라 주세요'}
+          {sending
+            ? '보내는 중…'
+            : selected
+              ? `${selected.plant.name}에 ${m3(volumeM3)} 주문하기`
+              : '공장을 골라 주세요'}
         </button>
         {selected?.level === 'warn' && (
           <p

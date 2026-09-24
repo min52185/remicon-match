@@ -26,6 +26,8 @@ export interface LatLng {
 /** sites */
 export interface Site extends LatLng {
   id: string;
+  /** 소속 건설사 — 로그인 사용자의 회사와 맞는 것만 보여 준다 */
+  companyId?: string;
   name: string;
   address: string;
   /** 현장 진입 메모 — 트럭 진입로·게이트 위치 등 */
@@ -45,6 +47,8 @@ export interface PlantCapability {
 /** plants + plant_status 를 합친 화면용 형태 */
 export interface Plant extends LatLng {
   id: string;
+  /** 소속 레미콘사 */
+  companyId?: string;
   name: string;
   address: string;
   phone: string;

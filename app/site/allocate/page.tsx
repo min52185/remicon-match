@@ -16,7 +16,7 @@ import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
-import { clock, duration, fromLocalInput, m3, toLocalInput } from '@/lib/format';
+import { clock, duration, failure, fromLocalInput, m3, toLocalInput } from '@/lib/format';
 import type { AllocationResult, NaiveResult } from '@/lib/ai/allocate';
 import {
   DEFAULT_POUR_SETTINGS,
@@ -85,6 +85,7 @@ function AllocateBody({ site }: { site: Site }) {
   const [sentCount, setSentCount] = useState(0);
   /** 지시서 6장 A~G 예시로 계산할지 — 발표용 */
   const [useExample, setUseExample] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!pourStartAt) setPourStartAt(defaultPourStart());
@@ -157,8 +158,10 @@ function AllocateBody({ site }: { site: Site }) {
     }
   }
 
-  function sendOrders() {
+  async function sendOrders() {
     if (!result?.feasible) return;
+    setSending(true);
+    setError(null);
     const plan: AllocationPlan = {
       id: `pl${Date.now().toString(36)}`,
       siteId: site.id,
@@ -177,14 +180,20 @@ function AllocateBody({ site }: { site: Site }) {
       summary: result.message,
       createdAt: Date.now(),
     };
-    const orders = createOrdersFromPlan(plan, {
-      siteId: site.id,
-      spec,
-      pourStartAt,
-      pumpRate,
-      tempC,
-    });
-    setSentCount(orders.length);
+    try {
+      const orders = await createOrdersFromPlan(plan, {
+        siteId: site.id,
+        spec,
+        pourStartAt,
+        pumpRate,
+        tempC,
+      });
+      setSentCount(orders.length);
+    } catch (e) {
+      setError(failure(e, '주문을 보내지 못했습니다.'));
+    } finally {
+      setSending(false);
+    }
   }
 
   const markers: MapMarker[] = [
@@ -548,8 +557,13 @@ function AllocateBody({ site }: { site: Site }) {
                   </p>
                 </div>
               ) : (
-                <button type="button" className="btn btn-primary btn-block" onClick={sendOrders}>
-                  {result.items.length}개 공장에 주문 한 번에 보내기
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  disabled={sending}
+                  onClick={() => void sendOrders()}
+                >
+                  {sending ? `보내는 중…` : `${result.items.length}개 공장에 주문 한 번에 보내기`}
                 </button>
               )}
             </div>

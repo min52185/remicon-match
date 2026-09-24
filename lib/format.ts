@@ -52,3 +52,22 @@ export const toLocalInput = (at: number) => {
 };
 const d0 = (at: number) => new Date(at).getTimezoneOffset() * MIN;
 export const fromLocalInput = (v: string) => new Date(v).getTime();
+
+/**
+ * 오류를 화면에 보여 줄 한 줄로.
+ * Supabase RLS 거절은 영문 코드만 와서 원인을 짐작하기 어렵다 — 뜻을 덧붙인다.
+ */
+export function failure(e: unknown, fallback: string): string {
+  const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
+  const code = (e as { code?: string } | null)?.code;
+
+  if (code === '42501' || /row-level security/i.test(msg)) {
+    return `${fallback} 권한이 없습니다 — 이 계정의 역할·소속으로는 할 수 없는 작업입니다.`;
+  }
+  if (code === '23505') return `${fallback} 같은 번호가 이미 있습니다. 다시 시도해 주세요.`;
+  if (code === '23503') return `${fallback} 연결된 자료를 찾지 못했습니다.`;
+  if (/failed to fetch|networkerror/i.test(msg)) {
+    return `${fallback} 인터넷 연결을 확인해 주세요.`;
+  }
+  return msg ? `${fallback} (${msg})` : fallback;
+}
