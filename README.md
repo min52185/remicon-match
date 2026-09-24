@@ -90,8 +90,10 @@ npm test
 
 리허설을 다시 하려면 `/setup` 맨 아래 **시연 데이터 비우기**를 누릅니다.
 
-> `npm run build` 는 `.next-build` 를, 개발 서버는 `.next` 를 씁니다. 그래서 개발 서버를 켜 둔 채
-> 빌드해도 서로 깨지지 않습니다 (`next.config.ts`).
+> **`npm run build` 전에는 개발 서버를 끄세요(Ctrl+C).** 둘 다 `.next` 폴더를 쓰기 때문에,
+> 켜 둔 채 빌드하면 캐시가 깨져 `Cannot find module` 오류가 납니다. 이미 깨졌다면 `.next` 폴더를
+> 지우고 `npm run dev` 를 다시 켜면 됩니다.
+> (`distDir` 을 바꾸면 Vercel 배포가 실패하므로 기본값 `.next` 를 그대로 씁니다.)
 
 ---
 

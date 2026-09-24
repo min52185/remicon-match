@@ -4,11 +4,14 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
 
   /**
-   * 개발 서버와 빌드가 같은 폴더(.next)를 쓰면, 개발 서버를 켜 둔 채 `npm run build` 를 돌렸을 때
-   * 캐시가 깨져 "Cannot find module './331.js'" 같은 오류가 난다. 폴더를 갈라 둔다.
-   * `next start` 와 Vercel 도 이 설정을 읽으므로 배포에는 영향이 없다.
+   * 빌드 결과물 폴더는 기본값 .next 를 그대로 쓴다.
+   * Vercel 의 Next.js 빌더가 .next 를 찾으므로, distDir 을 바꾸면
+   * "The Next.js output directory .next was not found" 로 배포가 실패한다.
+   *
+   * 대신 개발 서버를 켜 둔 채 `npm run build` 를 돌리지 않는다 —
+   * 둘이 같은 폴더를 쓰기 때문에 캐시가 깨진다. 빌드 전에 Ctrl+C 로 개발 서버를 끈다.
+   * 이미 깨졌다면 .next 폴더를 지우고 다시 켜면 된다.
    */
-  distDir: process.env.NODE_ENV === 'production' ? '.next-build' : '.next',
 };
 
 export default nextConfig;
