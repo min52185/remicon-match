@@ -495,3 +495,25 @@ export async function pushLocation(loc: TruckLocation) {
   if (error) throw error;
   // 위치는 10~15초마다 들어온다. 현장 화면은 Realtime 으로 받는다.
 }
+
+/* ==========================================================================
+ * 기사 ↔ 차량 배정
+ * 기사가 비어 있는 차를 자기 앞으로 가져간다. RLS 가 "빈 차 또는 내 차"만
+ * 허용하므로, 남이 몰고 있는 차를 가로챌 수는 없다.
+ * ======================================================================== */
+
+export async function claimTruck(truckId: string) {
+  const sb = client();
+  const uid = await myId(sb);
+  if (!uid) throw new Error('로그인이 필요합니다.');
+  const { error } = await sb.from('trucks').update({ driver_id: uid }).eq('id', truckId);
+  if (error) throw error;
+  await refresh();
+}
+
+export async function releaseTruck(truckId: string) {
+  const sb = client();
+  const { error } = await sb.from('trucks').update({ driver_id: null }).eq('id', truckId);
+  if (error) throw error;
+  await refresh();
+}

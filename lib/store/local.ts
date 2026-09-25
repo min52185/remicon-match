@@ -337,3 +337,22 @@ export async function pushLocation(loc: TruckLocation) {
   }));
 }
 
+
+/* ==========================================================================
+ * 기사 ↔ 차량 배정 (시연 모드)
+ * 로그인이 없으므로 'demo' 라는 한 사람이 차를 맡는 것으로 둔다.
+ * ======================================================================== */
+
+export async function claimTruck(truckId: string) {
+  update((d) => ({
+    ...d,
+    trucks: d.trucks.map((t) => (t.id === truckId ? { ...t, driverId: 'demo' } : t)),
+  }));
+}
+
+export async function releaseTruck(truckId: string) {
+  update((d) => ({
+    ...d,
+    trucks: d.trucks.map((t) => (t.id === truckId ? { ...t, driverId: undefined } : t)),
+  }));
+}

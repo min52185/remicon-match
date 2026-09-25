@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { PlantShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
-import { clock, duration, m3, remaining } from '@/lib/format';
+import { clock, duration, failure, m3, remaining } from '@/lib/format';
 import {
   DeliveryRules,
   MIN,
@@ -77,6 +77,8 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
   const deliveries = deliveriesOfOrder(db, order.id);
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [truckId, setTruckId] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!site) return;
@@ -96,7 +98,10 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
 
   // 지금 운행 중이 아닌 차량만 고를 수 있다
   const busy = new Set(activeDeliveriesOfPlant(db, plant.id).map((d) => d.truckId));
-  const free = db.trucks.filter((t) => t.plantId === plant.id && !busy.has(t.id));
+  const free = db.trucks
+    .filter((t) => t.plantId === plant.id && !busy.has(t.id))
+    // 기사가 맡은 차를 위로 — 그 차로 배차해야 기사 화면에 배송이 뜬다
+    .sort((a, b) => Number(!!b.driverId) - Number(!!a.driverId) || a.no - b.no);
 
   // AI 시각표가 있으면 "다음 회차"의 권장 출하 시각을 알려 준다
   const nextMixStartAt = planItem?.mixStartAts
@@ -104,18 +109,26 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
     .sort((a, b) => a - b)
     .find((_, i) => i === deliveries.length);
 
-  function send() {
+  async function send() {
     if (!route || !truckId || left <= 0) return;
-    dispatchTruck({
-      order,
-      truckId,
-      travelMinutes: route.minutes,
-      distanceKm: route.distanceKm,
-      path: route.path,
-      volumeM3: nextVolume,
-      mixStartAt: now,
-    });
-    setTruckId('');
+    setSending(true);
+    setError(null);
+    try {
+      await dispatchTruck({
+        order,
+        truckId,
+        travelMinutes: route.minutes,
+        distanceKm: route.distanceKm,
+        path: route.path,
+        volumeM3: nextVolume,
+        mixStartAt: now,
+      });
+      setTruckId('');
+    } catch (e) {
+      setError(failure(e, '출하 지시에 실패했습니다.'));
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -209,18 +222,24 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
               <option value="">차량을 고르세요</option>
               {free.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.no}호차 · {t.plateNo} · {t.driver}
+                  {t.no}호차 · {t.plateNo}
+                  {t.driverId ? ' · 기사 배정됨' : ' · 기사 없음'}
                 </option>
               ))}
             </select>
           </label>
+          {error && (
+            <p style={{ fontSize: '0.82rem', color: 'var(--color-bad)', margin: '0 0 8px' }}>
+              {error}
+            </p>
+          )}
           <button
             type="button"
             className="btn btn-primary btn-block"
-            disabled={!truckId || !route}
-            onClick={send}
+            disabled={!truckId || !route || sending}
+            onClick={() => void send()}
           >
-            {m3(nextVolume)} 출하 지시 — 지금 비비기 시작
+            {sending ? '출하 지시 중…' : `${m3(nextVolume)} 출하 지시 — 지금 비비기 시작`}
           </button>
         </div>
       )}

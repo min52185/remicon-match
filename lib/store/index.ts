@@ -52,3 +52,5 @@ export const updateEta = backend.updateEta;
 export const markArrived = backend.markArrived;
 export const markCompleted = backend.markCompleted;
 export const pushLocation = backend.pushLocation;
+export const claimTruck = backend.claimTruck;
+export const releaseTruck = backend.releaseTruck;

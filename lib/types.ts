@@ -71,6 +71,8 @@ export interface Truck {
   no: number;
   plateNo: string;
   driver: string;
+  /** 이 차를 맡은 기사 계정 — 비어 있으면 아직 배정 전 */
+  driverId?: string;
   capacityM3: number;
 }
 

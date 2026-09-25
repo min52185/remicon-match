@@ -200,7 +200,8 @@ export function toTruck(r: TruckRow, driverName?: string): Truck {
     plantId: r.plant_id,
     no: r.no,
     plateNo: r.plate_no,
-    driver: driverName ?? (r.driver_id ? '기사' : '미배정'),
+    driver: driverName ?? (r.driver_id ? '배정됨' : '미배정'),
+    driverId: r.driver_id ?? undefined,
     capacityM3: Number(r.capacity_m3),
   };
 }
