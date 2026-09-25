@@ -509,6 +509,19 @@ function AllocateBody({ site }: { site: Site }) {
                     <span style={{ fontSize: '0.84rem', color: 'var(--color-concrete-wet)' }}>
                       {a.detail}
                     </span>
+                    {a.volumeM3 !== undefined && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        style={{ marginTop: 8 }}
+                        onClick={() => {
+                          setTotalVolumeM3(a.volumeM3!);
+                          setResult(null);
+                        }}
+                      >
+                        이 물량으로 바꾸기
+                      </button>
+                    )}
                     {a.pumpRate && (
                       <button
                         type="button"

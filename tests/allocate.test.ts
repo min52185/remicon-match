@@ -164,3 +164,84 @@ describe('외기온도가 제한시간을 바꾼다', () => {
     expect(cold.excluded.find((e) => e.plantId === 'G')).toBeUndefined();
   });
 });
+
+/* ==========================================================================
+ * 불가일 때의 대안 — 지시서 6장 "불가만 말하지 않는다"
+ * 실제 시연에서 서천동·광교 현장이 300m³ 에서 막힌 상황을 그대로 옮긴 것이다.
+ * ======================================================================== */
+
+/** 허용 50분 안에 32대뿐이라 300m³(50대)가 안 되는 상황 */
+const SHORT_SUPPLY: AllocationInput = {
+  ...EXAMPLE,
+  tempC: 26, // 25℃ 이상 → 제한 90분 → 허용 50분
+  plants: [
+    { id: 'A', name: '가온', availableTrucks: 8, hourlyRate: 4, travelMinutes: 30 },
+    { id: 'B', name: '누리', availableTrucks: 5, hourlyRate: 4, travelMinutes: 34 },
+    { id: 'C', name: '한결', availableTrucks: 3, hourlyRate: 4, travelMinutes: 41 },
+    { id: 'D', name: '보람', availableTrucks: 10, hourlyRate: 4, travelMinutes: 49 },
+    { id: 'E', name: '참빛', availableTrucks: 6, hourlyRate: 4, travelMinutes: 49 },
+  ],
+};
+
+describe('차가 모자라 불가할 때', () => {
+  const result = allocate(SHORT_SUPPLY);
+
+  it('불가로 판정한다', () => {
+    expect(result.feasible).toBe(false);
+    expect(result.allowedTravelMinutes).toBe(50);
+  });
+
+  it('"몇 m³까지 되는지"를 알려 준다', () => {
+    const v = result.alternatives.find((a) => a.kind === 'volume');
+    expect(v).toBeDefined();
+    // 허용 50분 안의 출하 여력이 32대 → 192m³
+    expect(v!.label).toContain('192m³');
+  });
+
+  it('그 물량으로 다시 풀면 실제로 가능하다', () => {
+    expect(allocate({ ...SHORT_SUPPLY, totalVolumeM3: 192 }).feasible).toBe(true);
+  });
+
+  it('펌프 속도를 낮추는 대안은 내놓지 않는다 — 차가 늘지 않으므로', () => {
+    expect(result.alternatives.some((a) => a.kind === 'pumpRate')).toBe(false);
+  });
+});
+
+describe('시원한 시간대로 옮기면 되는 경우', () => {
+  // 70분 거리에 20대가 더 있다. 허용 50분에서는 제외되지만 80분에서는 들어온다.
+  const withFarPlant: AllocationInput = {
+    ...SHORT_SUPPLY,
+    plants: [
+      ...SHORT_SUPPLY.plants,
+      { id: 'F', name: '먼공장', availableTrucks: 20, hourlyRate: 4, travelMinutes: 70 },
+    ],
+  };
+  const result = allocate(withFarPlant);
+
+  it('25℃ 이상이라 불가하다', () => {
+    expect(result.feasible).toBe(false);
+  });
+
+  it('이른 아침으로 옮기라는 대안을 낸다', () => {
+    const s = result.alternatives.find((a) => a.kind === 'schedule');
+    expect(s).toBeDefined();
+    expect(s!.detail).toContain('90분 → 120분');
+  });
+
+  it('실제로 25℃ 미만이면 가능해진다', () => {
+    expect(allocate({ ...withFarPlant, tempC: 24 }).feasible).toBe(true);
+  });
+});
+
+describe('대안을 찾느라 계산이 폭주하지 않는다', () => {
+  it('불가한 입력도 즉시 끝난다', () => {
+    const t0 = Date.now();
+    allocate(SHORT_SUPPLY);
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
+  it('대안 계산 안에서는 다시 대안을 찾지 않는다', () => {
+    const r = allocate({ ...SHORT_SUPPLY, skipAlternatives: true });
+    expect(r.alternatives).toEqual([]);
+  });
+});

@@ -29,6 +29,7 @@ import {
   DEFAULT_POUR_SETTINGS,
   MIN,
   PourRules,
+  RULES,
   TRUCK_CAPACITY_M3,
   type PourSettings,
 } from '../rules';
@@ -53,6 +54,8 @@ export interface AllocationInput {
   plants: AllocationPlantInput[];
   truckCapacityM3?: number;
   settings?: PourSettings;
+  /** 내부용 — 대안을 계산하는 중에는 다시 대안을 찾지 않는다(재귀 방지) */
+  skipAlternatives?: boolean;
 }
 
 export interface AllocatedPlant {
@@ -76,11 +79,12 @@ export interface ExcludedPlant {
 }
 
 export interface AllocationAlternative {
-  kind: 'pumpRate' | 'safetyMargin' | 'capacity';
+  kind: 'pumpRate' | 'safetyMargin' | 'capacity' | 'volume' | 'schedule';
   label: string;
   detail: string;
   /** 그 대안으로 다시 풀었을 때의 결과 (capacity 는 계산 불가라 없음) */
   pumpRate?: number;
+  volumeM3?: number;
   pourEndAt?: number;
 }
 
@@ -282,7 +286,7 @@ export function allocate(input: AllocationInput): AllocationResult {
       items: [],
       totalTravelMinutes: 0,
       unassigned: shortfall,
-      alternatives: buildAlternatives(input, q, settings, allowed),
+      alternatives: input.skipAlternatives ? [] : buildAlternatives(input, q, settings, allowed),
       message:
         unassigned > 0
           ? `${N}대 중 ${shortfall}대를 배정할 공장이 없습니다. 허용 이동시간 ${allowed}분 안에 있는 공장의 출하 여력이 모자랍니다.`
@@ -335,10 +339,37 @@ function buildAlternatives(
   allowed: number,
 ): AllocationAlternative[] {
   const out: AllocationAlternative[] = [];
+  /** 대안을 찾는 중에 또 대안을 찾지 않게 한다 */
+  const probe = (patch: Partial<AllocationInput>) =>
+    allocate({ ...input, truckCapacityM3: q, settings, ...patch, skipAlternatives: true });
+
+  /*
+   * ⓪ 이 조건에서 가능한 최대 물량.
+   *    차가 모자라서 불가한 경우에는 펌프 속도를 낮춰도 해결되지 않는다 —
+   *    간격만 늘어날 뿐 쓸 수 있는 차가 늘지는 않기 때문이다.
+   *    그때 현장이 실제로 알고 싶은 것은 "그럼 몇 m³까지 되는가" 하나다.
+   *    대수를 줄이면 항상 쉬워지므로(단조) 이분 탐색으로 찾는다.
+   */
+  const need = trucksNeeded(input.totalVolumeM3, q);
+  let lo = 0;
+  let hi = need;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (probe({ totalVolumeM3: mid * q }).feasible) lo = mid;
+    else hi = mid;
+  }
+  if (lo > 0) {
+    out.push({
+      kind: 'volume',
+      volumeM3: lo * q,
+      label: `이번 타설을 ${lo * q}m³ 로 줄이기`,
+      detail: `지금 조건(허용 이동시간 ${allowed}분)에서는 ${lo}대까지 끊김없이 받을 수 있습니다. 나머지 ${input.totalVolumeM3 - lo * q}m³ 는 시공 이음을 두고 나눠 치거나, 다른 날로 옮겨야 합니다.`,
+    });
+  }
 
   // ① 펌프 속도를 낮추면 간격이 늘어 같은 공장으로도 맞출 수 있다
   for (let rate = input.pumpRate - 5; rate >= 20; rate -= 5) {
-    const trial = allocate({ ...input, pumpRate: rate, truckCapacityM3: q, settings });
+    const trial = probe({ pumpRate: rate });
     if (trial.feasible) {
       out.push({
         kind: 'pumpRate',
@@ -353,8 +384,7 @@ function buildAlternatives(
 
   // ② 안전 여유를 줄이면 먼 공장도 후보가 된다 (지시서: 교통이 막히면 바로 제한 초과)
   if (settings.safetyMarginMinutes > 0) {
-    const relaxed = { ...settings, safetyMarginMinutes: 0 };
-    const trial = allocate({ ...input, truckCapacityM3: q, settings: relaxed });
+    const trial = probe({ settings: { ...settings, safetyMarginMinutes: 0 } });
     if (trial.feasible) {
       out.push({
         kind: 'safetyMargin',
@@ -364,7 +394,23 @@ function buildAlternatives(
     }
   }
 
-  // ③ 사람이 해야 하는 일
+  /*
+   * ③ 시원한 시간대로 옮기기.
+   *    외기 25℃ 이상이면 제한이 90분, 미만이면 120분이다. 30분 차이는 허용 이동시간에
+   *    그대로 얹히므로, 이른 아침으로 옮기는 것만으로 후보 공장이 크게 늘어난다.
+   */
+  if (input.tempC >= RULES.HOT_THRESHOLD_C) {
+    const trial = probe({ tempC: RULES.HOT_THRESHOLD_C - 1 });
+    if (trial.feasible) {
+      out.push({
+        kind: 'schedule',
+        label: '외기 25℃ 미만인 시간대(이른 아침)로 타설 옮기기',
+        detail: `제한시간이 ${PourRules.limitMinutes(input.tempC)}분 → ${trial.limitMinutes}분이 되어 허용 이동시간이 ${allowed}분 → ${trial.allowedTravelMinutes}분으로 늘어납니다. 지금 조건에서 이것만으로 배분이 가능해집니다.`,
+      });
+    }
+  }
+
+  // ④ 사람이 해야 하는 일
   out.push({
     kind: 'capacity',
     label: '공장에 출하 능력 상향 요청 또는 응결지연제 협의',
