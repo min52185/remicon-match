@@ -25,7 +25,7 @@ import {
   IconStar,
   IconTruck,
 } from './icons';
-import { Empty, Panel } from './ui';
+import { Empty, Panel, Row } from './ui';
 import { useAuth } from '@/lib/auth';
 import { HOME_BY_ROLE, ROLE_LABEL } from '@/lib/routes';
 import { useDb, useSelection } from '@/lib/store/hooks';
@@ -155,7 +155,17 @@ export function SiteShell({ title, description, showClock, children }: ShellProp
         </>
       }
     >
-      {site ? children(site) : <NoneYet what="현장" loaded={db.loaded} />}
+      {site ? (
+        children(site)
+      ) : (
+        <NoneYet
+          what="현장"
+          loaded={db.loaded}
+          total={db.sites.length}
+          myCompany={profile?.companyId}
+          theirCompanies={db.sites.map((x) => x.companyId)}
+        />
+      )}
     </AppShell>
   );
 }
@@ -216,7 +226,17 @@ export function PlantShell({ title, description, showClock, children }: ShellPro
         </>
       }
     >
-      {plant ? children(plant) : <NoneYet what="공장" loaded={db.loaded} />}
+      {plant ? (
+        children(plant)
+      ) : (
+        <NoneYet
+          what="공장"
+          loaded={db.loaded}
+          total={db.plants.length}
+          myCompany={profile?.companyId}
+          theirCompanies={db.plants.map((x) => x.companyId)}
+        />
+      )}
     </AppShell>
   );
 }
@@ -265,17 +285,58 @@ function Loading() {
   );
 }
 
-function NoneYet({ what, loaded }: { what: string; loaded: boolean }) {
+/**
+ * 고를 것이 없을 때. 원인이 둘로 갈리므로(자료를 못 읽었는가 / 소속이 안 맞는가)
+ * 짐작하게 두지 않고 읽어온 개수와 소속 id 를 그대로 보여 준다.
+ */
+function NoneYet({
+  what,
+  loaded,
+  total,
+  myCompany,
+  theirCompanies,
+}: {
+  what: string;
+  loaded: boolean;
+  total: number;
+  myCompany: string | null | undefined;
+  theirCompanies: (string | undefined)[];
+}) {
   if (!loaded) return <Empty>불러오는 중…</Empty>;
+
+  const short = (v: string | null | undefined) => (v ? `${v.slice(0, 8)}…` : '없음');
+  const unique = [...new Set(theirCompanies.map(short))];
+
   return (
-    <Panel>
-      <Empty>
-        내 소속에 등록된 {what}이 없습니다.
-        <br />
-        가입할 때 고른 회사가 맞는지 확인하거나, Supabase 에서{' '}
-        <code style={{ fontFamily: 'var(--font-mono)' }}>0002_seed.sql</code> 을 실행했는지
-        확인하세요.
-      </Empty>
+    <Panel title={`고를 수 있는 ${what}이 없습니다`}>
+      {total === 0 ? (
+        <p style={{ fontSize: '0.9rem', margin: '0 0 12px', lineHeight: 1.6 }}>
+          {what} 자료를 <strong>한 건도 읽지 못했습니다.</strong> Supabase SQL Editor 에서{' '}
+          <code style={{ fontFamily: 'var(--font-mono)' }}>0002_seed.sql</code> 을 실행했는지
+          확인하세요.
+        </p>
+      ) : (
+        <p style={{ fontSize: '0.9rem', margin: '0 0 12px', lineHeight: 1.6 }}>
+          {what} {total}건은 읽었지만 <strong>내 소속과 맞는 것이 없습니다.</strong> 가입할 때 고른
+          회사가 달랐을 수 있습니다.
+        </p>
+      )}
+
+      <div style={{ fontSize: '0.84rem' }}>
+        <Row label={`읽어온 ${what}`}>{total}건</Row>
+        <Row label="내 소속 id">
+          <code style={{ fontFamily: 'var(--font-mono)' }}>{short(myCompany)}</code>
+        </Row>
+        <Row label={`${what}의 소속 id`}>
+          <code style={{ fontFamily: 'var(--font-mono)' }}>{unique.join(', ') || '없음'}</code>
+        </Row>
+      </div>
+
+      <p style={{ fontSize: '0.82rem', color: 'var(--color-concrete-mid)', margin: '12px 0 0' }}>
+        두 id 가 다르면 로그아웃 후 다시 가입하면서 회사를 맞춰 고르거나, Supabase{' '}
+        <strong>Table Editor → profiles</strong> 에서 내 행의 <code>company_id</code> 를 위 값으로
+        고치면 됩니다.
+      </p>
     </Panel>
   );
 }
