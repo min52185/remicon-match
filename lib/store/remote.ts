@@ -95,7 +95,22 @@ function start() {
   if (!sb) return;
   started = true;
 
-  void refresh();
+  /*
+   * 세션이 붙기 전에 읽으면 PostgREST 가 요청을 익명으로 보고, RLS 가 0건을 돌려준다.
+   * 그러면 "내 소속에 등록된 현장이 없습니다" 가 뜬 채로 영영 복구되지 않는다 —
+   * Realtime 은 데이터가 바뀔 때만 알려 주므로 다시 읽을 계기가 없기 때문이다.
+   * 그래서 (1) 세션이 확정된 뒤에 처음 읽고 (2) 로그인·토큰 갱신 때마다 다시 읽는다.
+   */
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      db = emptyDb();
+      emit();
+      return;
+    }
+    scheduleRefresh();
+  });
+
+  void sb.auth.getSession().then(() => refresh());
 
   sb.channel('remicon-all')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, scheduleRefresh)
