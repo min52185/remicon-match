@@ -14,11 +14,19 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { SiteShell } from '@/components/RoleShells';
+import UrgentRequest from '@/components/UrgentRequest';
 import { Alert, Bar, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
 import { analyzeDelay, monitorPour } from '@/lib/ai/predict';
 import { dayRange, todaysOrders } from '@/lib/dashboard';
 import { clock, delayText, m3, remaining } from '@/lib/format';
-import { DeliveryRules, ORDER_STATUS_LABEL, ORDER_TONE, RULES } from '@/lib/rules';
+import {
+  DeliveryRules,
+  ORDER_STATUS_LABEL,
+  ORDER_TONE,
+  RULES,
+  TRUCK_CAPACITY_M3,
+  UNLOAD_EST_MIN,
+} from '@/lib/rules';
 import { getPosition } from '@/lib/services/tracking';
 import { useDb, useMounted, useNow } from '@/lib/store/hooks';
 import type { Delivery, Site } from '@/lib/types';
@@ -70,6 +78,19 @@ function DashboardBody({ site }: { site: Site }) {
     .filter((x) => x.a.level !== 'ok')
     .sort((a, b) => b.a.minutes - a.a.minutes);
 
+  /**
+   * 긴급으로 몇 대를 부를까.
+   * 공백을 메우는 데 필요한 대수다 — 한 대가 UNLOAD_EST_MIN 동안 현장을 채우므로
+   * 공백을 그 값으로 나눈다. 남은 물량보다 많이 부르지는 않는다.
+   */
+  const urgentTrucks = Math.max(
+    1,
+    Math.min(
+      Math.ceil(monitor.remainingM3 / TRUCK_CAPACITY_M3),
+      Math.ceil((monitor.gapMinutes ?? 0) / UNLOAD_EST_MIN),
+    ),
+  );
+
   const todayVolume = todayOrders.reduce((s, o) => s + o.volumeM3, 0);
   const pendingCount = siteOrders.filter((o) => o.status === 'requested').length;
 
@@ -95,11 +116,17 @@ function DashboardBody({ site }: { site: Site }) {
           </Alert>
           <Link
             href="/site/tracking"
-            className="btn btn-primary btn-block btn-sm"
+            className="btn btn-outline btn-block btn-sm"
             style={{ marginTop: 12 }}
           >
             타설 모니터 열기
           </Link>
+          <UrgentRequest
+            site={site}
+            basis={activeOrders[0]}
+            defaultTrucks={urgentTrucks}
+            defaultReason={monitor.message}
+          />
         </Panel>
       )}
 

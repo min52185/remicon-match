@@ -99,6 +99,8 @@ export interface OrderRow {
   plan_id: string | null;
   reject_reason: string | null;
   note: string | null;
+  urgent: boolean | null;
+  urgent_reason: string | null;
   created_at: string;
 }
 
@@ -233,6 +235,8 @@ export const toOrder = (r: OrderRow): Order => ({
   planId: r.plan_id ?? undefined,
   rejectReason: r.reject_reason ?? undefined,
   note: r.note ?? undefined,
+  urgent: r.urgent ?? false,
+  urgentReason: r.urgent_reason ?? undefined,
   createdAt: msReq(r.created_at),
 });
 
@@ -311,6 +315,8 @@ export const orderInsert = (o: Omit<Order, 'id' | 'createdAt'>, createdBy: strin
   status: o.status,
   plan_id: o.planId ?? null,
   note: o.note ?? null,
+  urgent: o.urgent ?? false,
+  urgent_reason: o.urgentReason ?? null,
   created_by: createdBy,
 });
 

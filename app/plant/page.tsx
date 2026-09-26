@@ -30,6 +30,7 @@ import {
   PHASE_TONE,
   TRUCK_CAPACITY_M3,
   cementShort,
+  specText,
 } from '@/lib/rules';
 import {
   activeDeliveriesOfPlant,
@@ -78,6 +79,8 @@ function DashboardBody({ plant }: { plant: Plant }) {
   return (
     <>
       <MockNotice />
+
+      <UrgentInbox plant={plant} />
 
       {!plant.isOpen && (
         <Panel style={{ borderWidth: 2, borderColor: 'var(--color-bad)' }}>
@@ -589,6 +592,52 @@ function Fleet({
       <p style={{ fontSize: '0.78rem', color: 'var(--color-concrete-mid)', margin: '10px 0 0' }}>
         합계 {m3(active.reduce((s, d) => s + d.volumeM3, 0))} 운반 중
       </p>
+    </Panel>
+  );
+}
+
+/* ==========================================================================
+ * 긴급 주문
+ *
+ * 현장이 타설 공백을 겪고 있을 때 보낸 주문이다. 수락이 늦으면 현장은 다른
+ * 공장을 찾는다 — 그래서 현황판 맨 위에 둔다.
+ * ======================================================================== */
+
+function UrgentInbox({ plant }: { plant: Plant }) {
+  const db = useDb();
+  const urgent = db.orders
+    .filter((o) => o.plantId === plant.id && o.urgent && o.status === 'requested')
+    .sort((a, b) => a.createdAt - b.createdAt);
+
+  if (urgent.length === 0) return null;
+
+  return (
+    <Panel
+      title={`긴급 배차 요청 ${urgent.length}건`}
+      aside={<Tag tone="bad">지금 확인</Tag>}
+      style={{ borderWidth: 2, borderColor: 'var(--color-bad)' }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {urgent.map((o) => {
+          const site = db.sites.find((s) => s.id === o.siteId);
+          return (
+            <Alert
+              key={o.id}
+              tone="bad"
+              title={`${site?.name ?? ''} · ${m3(o.volumeM3)} · ${specText(o.spec)}`}
+            >
+              {o.urgentReason ?? '현장 요청'} — {clock(o.createdAt)} 요청
+            </Alert>
+          );
+        })}
+      </div>
+      <Link
+        href="/plant/orders"
+        className="btn btn-primary btn-block btn-sm"
+        style={{ marginTop: 12 }}
+      >
+        수락 · 거절 결정하기
+      </Link>
     </Panel>
   );
 }

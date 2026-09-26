@@ -121,6 +121,10 @@ export interface Order {
   createdAt: number;
   rejectReason?: string;
   note?: string;
+  /** 긴급 배차 요청으로 들어온 주문 — 공장 화면에서 맨 위로 올라간다 */
+  urgent?: boolean;
+  /** 왜 급한지 — 예: "다음 차까지 42분 공백" */
+  urgentReason?: string;
 }
 
 /** allocation_plans — AI 배분 1회 = 1행 */

@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { PlantShell } from '@/components/RoleShells';
-import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
+import { Alert, Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { clock, dateClock, duration, m3 } from '@/lib/format';
 import {
   DEFAULT_POUR_SETTINGS,
@@ -46,7 +46,11 @@ function OrdersBody({ plant }: { plant: Plant }) {
   const db = useDb();
   const mounted = useMounted();
   const orders = ordersOfPlant(db, plant.id);
-  const pending = orders.filter((o) => o.status === 'requested');
+  // 긴급이 먼저다 — 현장이 이미 공백을 겪고 있다는 뜻이다
+  const pending = orders
+    .filter((o) => o.status === 'requested')
+    .sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || a.createdAt - b.createdAt);
+  const urgentCount = pending.filter((o) => o.urgent).length;
   const others = orders.filter((o) => o.status !== 'requested');
 
   if (!mounted) return <Empty>불러오는 중…</Empty>;
@@ -54,6 +58,15 @@ function OrdersBody({ plant }: { plant: Plant }) {
   return (
     <>
       <MockNotice />
+
+      {urgentCount > 0 && (
+        <Panel style={{ borderWidth: 2, borderColor: 'var(--color-bad)' }}>
+          <Alert tone="bad" title={`긴급 배차 요청 ${urgentCount}건`}>
+            현장이 타설 공백을 겪고 있습니다. 수락 여부를 바로 알려 주세요 — 늦어지면 현장은 다른
+            공장을 찾아야 합니다.
+          </Alert>
+        </Panel>
+      )}
 
       <Panel title={`수락 대기 ${pending.length}건`}>
         {pending.length === 0 ? (
@@ -145,12 +158,21 @@ function PendingCard({ order, plant }: { order: Order; plant: Plant }) {
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
         <strong style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>{order.code}</strong>
+        {order.urgent && <Tag tone="bad">긴급</Tag>}
         <span style={{ marginLeft: 'auto' }}>
           <Tag tone={worst}>
             {worst === 'ok' ? '수락 가능' : worst === 'warn' ? '확인 필요' : '수락 어려움'}
           </Tag>
         </span>
       </div>
+
+      {order.urgent && (
+        <div style={{ marginBottom: 10 }}>
+          <Alert tone="bad" title="현장 사유">
+            {order.urgentReason ?? '현장 요청'}
+          </Alert>
+        </div>
+      )}
 
       <Row label="현장">{site?.name}</Row>
       <Row label="사양">{specText(order.spec)}</Row>
