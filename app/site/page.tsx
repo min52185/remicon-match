@@ -16,8 +16,9 @@ import { useMemo } from 'react';
 import { SiteShell } from '@/components/RoleShells';
 import { Alert, Bar, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
 import { analyzeDelay, monitorPour } from '@/lib/ai/predict';
+import { dayRange, todaysOrders } from '@/lib/dashboard';
 import { clock, delayText, m3, remaining } from '@/lib/format';
-import { DeliveryRules, MIN, ORDER_STATUS_LABEL, ORDER_TONE, RULES } from '@/lib/rules';
+import { DeliveryRules, ORDER_STATUS_LABEL, ORDER_TONE, RULES } from '@/lib/rules';
 import { getPosition } from '@/lib/services/tracking';
 import { useDb, useMounted, useNow } from '@/lib/store/hooks';
 import type { Delivery, Site } from '@/lib/types';
@@ -30,13 +31,6 @@ export default function SiteDashboardPage() {
   );
 }
 
-/** 하루의 시작~끝 (시연 시계 기준) */
-function dayRange(now: number) {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  return { start: start.getTime(), end: start.getTime() + 24 * 60 * MIN };
-}
-
 function DashboardBody({ site }: { site: Site }) {
   const db = useDb();
   const now = useNow(1000);
@@ -44,15 +38,7 @@ function DashboardBody({ site }: { site: Site }) {
 
   const siteOrders = db.orders.filter((o) => o.siteId === site.id);
 
-  // 오늘 — 타설 예정이 오늘이거나, 오늘 넣은 주문
-  const { start, end } = dayRange(now || Date.now());
-  const isToday = (t: number) => t >= start && t < end;
-  const todayOrders = siteOrders.filter(
-    (o) =>
-      o.status !== 'rejected' &&
-      o.status !== 'cancelled' &&
-      (isToday(o.pourStartAt) || isToday(o.createdAt)),
-  );
+  const todayOrders = todaysOrders(db.orders, site.id, dayRange(now || Date.now()));
 
   // 진행 중인 타설 — 추적 화면과 같은 기준
   const activeOrders = siteOrders.filter(
