@@ -12,10 +12,11 @@ import {
   isWithin,
   shipmentRhythm,
   targetInterval,
+  siteQueue,
   todaysOrders,
   upcomingShipments,
 } from '../lib/dashboard';
-import { MIN, TRUCK_CAPACITY_M3 } from '../lib/rules';
+import { MIN, TRUCK_CAPACITY_M3, UNLOAD_EST_MIN } from '../lib/rules';
 import { emptyDb, type Db } from '../lib/store/shared';
 import type { AllocationPlan, Delivery, Order, Spec } from '../lib/types';
 
@@ -295,5 +296,85 @@ describe('demandBySite — 현장별 주문량', () => {
 
   it('진행 중인 주문이 없으면 빈 표다', () => {
     expect(demandBySite(db(), 'p1', [])).toEqual([]);
+  });
+});
+
+describe('siteQueue — 현장 도착 대기 (펌프카는 한 대씩만 받는다)', () => {
+  const U = UNLOAD_EST_MIN; // 하역 추정 20분
+
+  /** 나 — 40분 뒤 도착 */
+  const mine = () => delivery({ id: 'me', mixStartAt: at(0), etaCurrentAt: at(40) });
+
+  it('현장이 비어 있으면 도착하자마자 붓는다', () => {
+    const q = siteQueue(db({ deliveries: [mine()] }), mine(), at(10));
+    expect(q.ahead).toBe(0);
+    expect(q.aheadOnSite).toBe(0);
+    expect(q.unloadStartAt).toBe(at(40));
+    expect(q.waitMin).toBe(0);
+  });
+
+  it('앞차가 현장에 서 있으면 그 차가 끝난 뒤에 붓는다', () => {
+    // 앞차가 35분에 도착해 35+20=55분에 끝난다 → 나는 40분에 가도 55분부터
+    const ahead = delivery({ id: 'a', mixStartAt: at(-20), etaCurrentAt: at(35), arriveAt: at(35) });
+    const q = siteQueue(db({ deliveries: [ahead, mine()] }), mine(), at(36));
+
+    expect(q.ahead).toBe(1);
+    expect(q.aheadOnSite).toBe(1);
+    expect(q.unloadStartAt).toBe(at(35 + U));
+    expect(q.waitMin).toBe(15); // 55 − 40
+  });
+
+  it('아직 안 온 차라도 나보다 먼저 도착하면 앞에 선다', () => {
+    const ahead = delivery({ id: 'a', mixStartAt: at(5), etaCurrentAt: at(30) });
+    const q = siteQueue(db({ deliveries: [ahead, mine()] }), mine(), at(10));
+
+    expect(q.ahead).toBe(1);
+    expect(q.aheadOnSite).toBe(0); // 아직 도착 전
+    expect(q.unloadStartAt).toBe(at(30 + U)); // 앞차 30분 도착 → 50분에 끝
+    expect(q.waitMin).toBe(10);
+  });
+
+  it('나보다 늦게 도착하는 차는 앞에 서지 않는다', () => {
+    const behind = delivery({ id: 'b', mixStartAt: at(20), etaCurrentAt: at(60) });
+    const q = siteQueue(db({ deliveries: [behind, mine()] }), mine(), at(10));
+    expect(q.ahead).toBe(0);
+    expect(q.waitMin).toBe(0);
+  });
+
+  it('여러 대가 줄을 서면 차례로 쌓인다', () => {
+    const a = delivery({ id: 'a', mixStartAt: at(-20), etaCurrentAt: at(20), arriveAt: at(20) });
+    const b = delivery({ id: 'b', mixStartAt: at(-10), etaCurrentAt: at(25), arriveAt: at(25) });
+    const q = siteQueue(db({ deliveries: [a, b, mine()] }), mine(), at(30));
+
+    // a: 20 도착 → 40 끝 / b: max(40, 25)=40 부터 → 60 끝 / 나: max(40분 도착, 60) = 60
+    expect(q.ahead).toBe(2);
+    expect(q.unloadStartAt).toBe(at(60));
+    expect(q.waitMin).toBe(20);
+  });
+
+  it('타설이 끝난 차와 다른 현장 차는 세지 않는다', () => {
+    const done = delivery({
+      id: 'done',
+      mixStartAt: at(-40),
+      etaCurrentAt: at(10),
+      arriveAt: at(10),
+      completedAt: at(30),
+    });
+    const elsewhere = delivery({
+      id: 'x',
+      siteId: 's2',
+      mixStartAt: at(0),
+      etaCurrentAt: at(20),
+      arriveAt: at(20),
+    });
+    const q = siteQueue(db({ deliveries: [done, elsewhere, mine()] }), mine(), at(35));
+    expect(q.ahead).toBe(0);
+    expect(q.waitMin).toBe(0);
+  });
+
+  it('내 차는 내 앞에 세지 않는다', () => {
+    const me = mine();
+    const q = siteQueue(db({ deliveries: [me] }), me, at(10));
+    expect(q.ahead).toBe(0);
   });
 });

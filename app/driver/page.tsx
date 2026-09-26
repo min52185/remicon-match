@@ -11,11 +11,14 @@
  * 네이티브 앱이나 차량 GPS 단말로 바꿔야 한다.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import KakaoMap, { type MapMarker, type MapPath } from '@/components/KakaoMap';
 import { DriverShell } from '@/components/RoleShells';
-import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
-import { clock, duration, failure, limitRemaining, m3 } from '@/lib/format';
-import { DeliveryRules, PHASE_LABEL, PHASE_TONE, specText } from '@/lib/rules';
+import { Alert, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
+import { siteQueue } from '@/lib/dashboard';
+import { clock, duration, failure, limitRemaining, m3, remaining } from '@/lib/format';
+import { DeliveryRules, MIN, PHASE_LABEL, PHASE_TONE, UNLOAD_EST_MIN, specText } from '@/lib/rules';
+import { getPosition } from '@/lib/services/tracking';
 import { claimTruck, markArrived, markCompleted, pushLocation, releaseTruck } from '@/lib/store';
 import { useDb, useMounted, useNow } from '@/lib/store/hooks';
 import { useAuth } from '@/lib/auth';
@@ -23,6 +26,9 @@ import type { Delivery, Truck } from '@/lib/types';
 
 /** 위치를 보내는 주기 — 지시서 3장: 10~15초 */
 const SEND_INTERVAL_MS = 15_000;
+
+/** [가정] 도착 예상이 이 분 넘게 바뀌면 배차 변경으로 알린다 */
+const ETA_ALERT_MIN = 10;
 
 export default function DriverPage() {
   return (
@@ -48,6 +54,8 @@ function DriverBody() {
     .filter((d) => !d.completedAt && (demoMode || d.truckId === myTruck?.id))
     .sort((a, b) => a.mixStartAt - b.mixStartAt);
 
+  const changes = useDispatchChanges(open);
+
   if (!mounted) return <Empty>불러오는 중…</Empty>;
 
   return (
@@ -55,6 +63,26 @@ function DriverBody() {
       <MockNotice>
         시연용 가상 데이터입니다. 실제 GPS 를 켜면 이 브라우저의 위치가 현장 화면에 표시됩니다.
       </MockNotice>
+
+      {changes.list.length > 0 && (
+        <Panel style={{ borderWidth: 2, borderColor: 'var(--color-rust)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {changes.list.map((c, i) => (
+              <Alert key={i} tone={c.tone} title={c.title}>
+                {c.detail}
+              </Alert>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm btn-block"
+            style={{ marginTop: 12 }}
+            onClick={changes.dismiss}
+          >
+            확인했습니다
+          </button>
+        </Panel>
+      )}
 
       {!demoMode && <MyTruck truck={myTruck} />}
 
@@ -71,6 +99,108 @@ function DriverBody() {
       )}
     </>
   );
+}
+
+/* ==========================================================================
+ * 배차 변경 알림
+ *
+ * 기사는 운전 중이라 화면을 계속 볼 수 없다. 배차가 바뀐 것을 현장에 다 가서
+ * 알면 늦는다. 그래서 바뀐 것만 맨 위에 모아 두고, 누르면 지워진다.
+ *
+ * 처음 화면을 열 때는 알리지 않는다 — 원래 있던 배차를 '새 배차'라고 하면
+ * 알림을 믿지 않게 된다. 그런데 첫 렌더만 건너뛰면 모자란다. 서버 렌더에서는
+ * 저장소가 비어 있고 브라우저에서 한 박자 뒤에 채워지므로, 그 사이를 '새 배차'로
+ * 읽어 버린다. 그래서 화면을 연 뒤 SETTLE_MS 동안은 기준만 갱신한다.
+ * ======================================================================== */
+
+/** [가정] 저장소가 채워질 때까지 기다리는 시간 */
+const SETTLE_MS = 700;
+
+interface DispatchChange {
+  tone: 'accent' | 'warn' | 'muted';
+  title: string;
+  detail: string;
+}
+
+function useDispatchChanges(open: Delivery[]) {
+  const db = useDb();
+  const [list, setList] = useState<DispatchChange[]>([]);
+  /** 직전에 본 배송 — id → 도착 예상 */
+  const seen = useRef<Map<string, number>>(new Map());
+  const settled = useRef(false);
+  const latest = useRef(open);
+  latest.current = open;
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      // 기다리는 동안 들어온 것은 '원래 있던 배차'로 친다
+      seen.current = new Map(latest.current.map((d) => [d.id, d.etaCurrentAt]));
+      settled.current = true;
+    }, SETTLE_MS);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  /**
+   * 무엇이 바뀌었는지만 추린 신호.
+   * open 은 렌더마다 새 배열이라 그대로 의존성에 쓰면 1초마다 효과가 돈다.
+   */
+  const signature = open.map((d) => `${d.id}:${d.etaCurrentAt}`).join('|');
+
+  // 화면 갱신 중에 상태를 바꾸면 안 되므로 effect 안에서 비교한다
+  useEffect(() => {
+    const current = latest.current;
+    const nowMap = new Map(current.map((d) => [d.id, d.etaCurrentAt]));
+
+    if (!settled.current) {
+      seen.current = nowMap;
+      return;
+    }
+
+    const before = seen.current;
+    const found: DispatchChange[] = [];
+
+    for (const d of current) {
+      const site = db.sites.find((s) => s.id === d.siteId);
+      const truck = db.trucks.find((t) => t.id === d.truckId);
+      const was = before.get(d.id);
+
+      if (was == null) {
+        found.push({
+          tone: 'accent',
+          title: '새 배차',
+          detail: `${truck?.no ?? '?'}호차 · ${site?.name ?? ''} · ${m3(d.volumeM3)} — 비비기 ${clock(
+            d.mixStartAt,
+          )}`,
+        });
+        continue;
+      }
+
+      const shift = Math.round((d.etaCurrentAt - was) / MIN);
+      if (Math.abs(shift) >= ETA_ALERT_MIN) {
+        found.push({
+          tone: 'warn',
+          title: `도착 예상 ${shift > 0 ? `${shift}분 늦어짐` : `${-shift}분 빨라짐`}`,
+          detail: `${site?.name ?? ''} — ${clock(was)} → ${clock(d.etaCurrentAt)}`,
+        });
+      }
+    }
+
+    // 사라진 배차 — 취소됐거나 다른 차로 넘어갔다
+    for (const [id] of before) {
+      if (!nowMap.has(id)) {
+        found.push({
+          tone: 'muted',
+          title: '배차 취소',
+          detail: '이 배송이 목록에서 빠졌습니다. 레미콘사에 확인하세요.',
+        });
+      }
+    }
+
+    seen.current = nowMap;
+    if (found.length > 0) setList((prev) => [...found, ...prev].slice(0, 5));
+  }, [signature, db.sites, db.trucks]);
+
+  return { list, dismiss: () => setList([]) };
 }
 
 /* ==========================================================================
@@ -191,6 +321,14 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
   const order = db.orders.find((o) => o.id === delivery.orderId);
   const phase = DeliveryRules.phase(delivery, now);
 
+  // 내 차 위치 — GPS 를 켜 뒀으면 실제 좌표, 아니면 경로 위를 달리는 가짜 차
+  const pos = useMemo(
+    () => getPosition(delivery, db.truckLocations, now),
+    [delivery, db.truckLocations, now],
+  );
+
+  const queue = siteQueue(db, delivery, now);
+
   const [tracking, setTracking] = useState(false);
   const [consented, setConsented] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -265,6 +403,61 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
       aside={<Tag tone={PHASE_TONE[phase]}>{PHASE_LABEL[phase]}</Tag>}
       style={{ borderWidth: tracking ? 2 : 1, borderColor: tracking ? 'var(--color-rust)' : undefined }}
     >
+      {/* 현장 위치와 추천 경로 — 기사가 가장 먼저 보는 것 */}
+      {site && (
+        <div style={{ marginBottom: 12 }}>
+          <KakaoMap
+            markers={[
+              ...(plant
+                ? [
+                    {
+                      id: plant.id,
+                      lat: plant.lat,
+                      lng: plant.lng,
+                      kind: 'plant' as const,
+                      label: plant.name,
+                      tone: 'muted' as const,
+                    },
+                  ]
+                : []),
+              {
+                id: site.id,
+                lat: site.lat,
+                lng: site.lng,
+                kind: 'site' as const,
+                label: site.name,
+                tone: 'accent' as const,
+              },
+              ...(phase === 'transit' || phase === 'loading'
+                ? [
+                    {
+                      id: delivery.id,
+                      lat: pos.lat,
+                      lng: pos.lng,
+                      kind: 'truck' as const,
+                      label: `내 차 ${clock(delivery.etaCurrentAt)}`,
+                      tone: 'ok' as const,
+                      selected: true,
+                    } satisfies MapMarker,
+                  ]
+                : []),
+            ]}
+            paths={
+              delivery.path.length > 1
+                ? ([{ id: delivery.id, points: delivery.path, emphasis: true }] satisfies MapPath[])
+                : []
+            }
+            height={220}
+          />
+          <p style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)', margin: '6px 0 0' }}>
+            추천 경로입니다. 현장 상황에 따라 기사 판단이 우선합니다.
+          </p>
+        </div>
+      )}
+
+      {/* 현장 도착 대기 — 가서 바로 부을 수 있나 */}
+      {phase !== 'done' && <ArrivalQueue delivery={delivery} queue={queue} now={now} />}
+
       <Row label="차량">
         {truck?.plateNo} · {truck?.driver}
       </Row>
@@ -386,5 +579,72 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
         화면이 꺼지면 브라우저가 위치 전송을 멈춥니다. 운행 중에는 화면을 켜 두세요.
       </p>
     </Panel>
+  );
+}
+
+/* ==========================================================================
+ * 현장 도착 대기
+ *
+ * 기사가 현장 앞에서 서 있는 시간은 그냥 기다리는 시간이 아니다. 그 사이에도
+ * 비비기~타설 제한시간(90/120분)은 계속 흐른다. 그래서 "몇 분 기다리나"와
+ * "기다리고 나면 기한이 남나"를 같이 보여 준다.
+ * ======================================================================== */
+
+function ArrivalQueue({
+  delivery,
+  queue,
+  now,
+}: {
+  delivery: Delivery;
+  queue: ReturnType<typeof siteQueue>;
+  now: number;
+}) {
+  const arrived = delivery.arriveAt != null && delivery.arriveAt <= now;
+  // 기다린 뒤 하역을 마쳤을 때 기한까지 남는 시간
+  const slackMin = Math.round(
+    (delivery.limitAt - (queue.unloadStartAt + UNLOAD_EST_MIN * MIN)) / MIN,
+  );
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <StatGrid min={96}>
+        <Stat
+          label={arrived ? '내 앞 대기' : '도착 시 내 앞'}
+          value={queue.ahead}
+          unit="대"
+          tone={queue.ahead === 0 ? 'ok' : queue.ahead >= 2 ? 'warn' : 'muted'}
+          hint={queue.aheadOnSite > 0 ? `현장에 ${queue.aheadOnSite}대 있음` : '현장 비어 있음'}
+        />
+        <Stat
+          label="하역 시작"
+          value={clock(queue.unloadStartAt)}
+          tone={queue.waitMin > 0 ? 'warn' : 'ok'}
+          hint={queue.unloadStartAt > now ? `${remaining(queue.unloadStartAt, now)} 뒤` : '지금'}
+        />
+        <Stat
+          label="대기 시간"
+          value={queue.waitMin}
+          unit="분"
+          tone={queue.waitMin === 0 ? 'ok' : queue.waitMin >= 15 ? 'bad' : 'warn'}
+          hint="도착 후 기다리는 시간"
+        />
+      </StatGrid>
+
+      {slackMin < 0 && (
+        <div style={{ marginTop: 10 }}>
+          <Alert tone="bad" title={`이대로면 타설 기한을 ${-slackMin}분 넘깁니다`}>
+            줄을 서 있는 동안에도 비비기~타설 제한시간은 흐릅니다. 현장 담당자에게 순서를 앞당길
+            수 있는지 확인하세요.
+          </Alert>
+        </div>
+      )}
+      {slackMin >= 0 && queue.waitMin >= 15 && (
+        <div style={{ marginTop: 10 }}>
+          <Alert tone="warn" title={`현장에서 ${queue.waitMin}분 기다릴 것으로 보입니다`}>
+            하역을 마쳐도 기한까지 {slackMin}분 남습니다. 도착 전에 현장에 연락해 두면 좋습니다.
+          </Alert>
+        </div>
+      )}
+    </div>
   );
 }

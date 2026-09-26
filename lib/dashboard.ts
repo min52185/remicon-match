@@ -10,7 +10,7 @@
  */
 
 import { intervalMinutes } from './ai/allocate';
-import { MIN, TRUCK_CAPACITY_M3 } from './rules';
+import { MIN, TRUCK_CAPACITY_M3, UNLOAD_EST_MIN } from './rules';
 import type { Db } from './store/shared';
 import type { Delivery, Order } from './types';
 
@@ -224,4 +224,67 @@ export function demandBySite(db: Db, plantId: string, orders: Order[]): SiteDema
   }
 
   return [...rows.values()].sort((a, b) => a.nextPourAt - b.nextPourAt);
+}
+
+/* ==========================================================================
+ * 기사 — 현장 도착 대기
+ * ======================================================================== */
+
+export interface SiteQueue {
+  /** 내 앞에 있는 차 — 이미 현장에 있는 차 + 나보다 먼저 도착할 차 */
+  ahead: number;
+  /** 그중 지금 현장에 서 있는 차 */
+  aheadOnSite: number;
+  /** 내가 하역을 시작할 수 있는 예상 시각 */
+  unloadStartAt: number;
+  /** 도착하고 나서 기다려야 하는 시간(분). 0이면 바로 붓는다. */
+  waitMin: number;
+}
+
+/**
+ * 현장에 도착했을 때 바로 부을 수 있는지.
+ *
+ * 펌프카는 한 대씩만 받는다. 그래서 앞차가 다 부을 때까지 줄을 선다 —
+ * 기사가 현장 앞에서 40분씩 서 있는 일이 실제로 흔하고, 그 사이에도
+ * 비비기~타설 제한시간은 계속 흐른다.
+ *
+ * 앞차 하역이 끝나는 시각을 차례로 쌓아, 내 차례가 언제 오는지 계산한다.
+ * 하역 시간은 UNLOAD_EST_MIN 추정치다 — 실제 기록이 쌓이면 고친다.
+ */
+export function siteQueue(db: Db, mine: Delivery, now: number): SiteQueue {
+  const others = db.deliveries.filter(
+    (d) => d.siteId === mine.siteId && d.id !== mine.id && !d.completedAt,
+  );
+
+  // 이미 현장에 서 있는 차 — 도착 순서대로 붓는다
+  const onSite = others
+    .filter((d) => d.arriveAt != null && d.arriveAt <= now)
+    .sort((a, b) => a.arriveAt! - b.arriveAt!);
+
+  // 나보다 먼저 도착할 차
+  const inboundAhead = others
+    .filter((d) => (d.arriveAt == null || d.arriveAt > now) && d.etaCurrentAt < mine.etaCurrentAt)
+    .sort((a, b) => a.etaCurrentAt - b.etaCurrentAt);
+
+  const unloadMs = UNLOAD_EST_MIN * MIN;
+
+  // 앞차들이 차례로 붓고 나면 펌프가 언제 비는가.
+  // 이미 현장에 있는 차는 도착한 때부터 부어 왔다 — 지금부터 재면 그만큼 밀려 나온다.
+  let freeAt = 0;
+  for (const d of onSite) freeAt = Math.max(freeAt, d.arriveAt!) + unloadMs;
+
+  // 아직 '타설 완료'를 안 누른 차가 현장에 있으면, 추정 하역시간이 지났더라도
+  // 펌프는 지금 비어 있지 않다. 눌러야 비는 것으로 본다.
+  if (onSite.length > 0) freeAt = Math.max(freeAt, now);
+
+  for (const d of inboundAhead) freeAt = Math.max(freeAt, d.etaCurrentAt) + unloadMs;
+
+  const unloadStartAt = Math.max(mine.etaCurrentAt, freeAt);
+
+  return {
+    ahead: onSite.length + inboundAhead.length,
+    aheadOnSite: onSite.length,
+    unloadStartAt,
+    waitMin: Math.max(0, Math.round((unloadStartAt - mine.etaCurrentAt) / MIN)),
+  };
 }
