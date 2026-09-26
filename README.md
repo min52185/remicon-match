@@ -82,6 +82,10 @@ npm test
 
 ### Supabase (지시서 0-8)
 
+> **이미 DB 를 만들어 두셨다면 `0003_urgent.sql` 을 한 번 실행하세요.**
+> `orders` 에 열 두 개를 더하는 SQL 입니다. 안 돌리면 **주문을 넣을 때마다 실패합니다**
+> (앱이 없는 열에 값을 넣으려 하기 때문입니다). 화면에는 "DB 에 없는 항목입니다" 로 뜹니다.
+
 1. <https://supabase.com> → 프로젝트 생성 (Region: **Northeast Asia (Seoul)**)
 2. **SQL Editor** 에서 `supabase/migrations/0001_init.sql` → `0002_seed.sql` → `0003_urgent.sql` 순서로 실행
    (`0003` 은 긴급 배차 요청용 열 두 개를 더합니다. 이미 만든 DB 에 다시 돌려도 안전합니다.)

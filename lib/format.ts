@@ -76,6 +76,10 @@ export function failure(e: unknown, fallback: string): string {
   if (code === '42501' || /row-level security/i.test(msg)) {
     return `${fallback} 권한이 없습니다 — 이 계정의 역할·소속으로는 할 수 없는 작업입니다.`;
   }
+  // 열이 없다 — 마이그레이션을 안 돌렸을 때 나온다. 원인을 짐작하게 두지 않는다.
+  if (code === '42703' || /column .* does not exist/i.test(msg)) {
+    return `${fallback} DB 에 없는 항목입니다 — Supabase SQL Editor 에서 supabase/migrations 의 SQL 을 순서대로 실행했는지 확인하세요.`;
+  }
   if (code === '23505') return `${fallback} 같은 번호가 이미 있습니다. 다시 시도해 주세요.`;
   if (code === '23503') return `${fallback} 연결된 자료를 찾지 못했습니다.`;
   if (/failed to fetch|networkerror/i.test(msg)) {
