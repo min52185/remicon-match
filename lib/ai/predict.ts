@@ -75,8 +75,21 @@ export interface PourMonitor {
   currentPourEndAt: number | null;
   /** 다음 차 도착 예상 시각 */
   nextArrivalAt: number | null;
-  /** 공백(분) — 다음 차 도착 − 지금 차 타설 종료. 음수면 겹쳐서 안전하다. */
+  /** 다음 차의 배송 id — 화면에서 "몇 호차"를 찾는 데 쓴다 */
+  nextDeliveryId: string | null;
+  /**
+   * 타설 공백(분) — 다음 차 도착 − 지금 차 타설 종료.
+   * 타설이 실제로 멈춰 있는 시간이다. 음수면 겹쳐서 안전하다.
+   * KCS 의 이어치기 시간간격과는 다른 숫자다 (아래 jointIntervalMin).
+   */
   gapMinutes: number | null;
+  /**
+   * 이어치기 시간간격(분) — 하층 콘크리트 비비기 시작 ~ 다음 차(상층) 도착.
+   * KCS 14 20 10 표 3.3-1 의 정의를 그대로 따른다. 이 값이 한도와 비교되는 값이다.
+   */
+  jointIntervalMin: number | null;
+  /** 한도까지 남는 시간(분). 음수면 이미 넘었다. */
+  jointSlackMin: number | null;
   level: Level;
   message: string;
   /** 이어치기 허용 시간간격(분) */
@@ -89,9 +102,16 @@ export interface PourMonitorInput {
   /** 이 타설에 속한 배송 전부 */
   deliveries: Delivery[];
   now: number;
-  /** 경고를 띄울 공백 기준 (팀이 정한 값) */
+  /** 경고를 띄울 타설 공백 기준 (팀이 정한 값) */
   warnGapMin?: number;
 }
+
+/** 값이 없는 판정 결과를 만들 때 쓰는 바탕 */
+const NO_GAP = {
+  gapMinutes: null,
+  jointIntervalMin: null,
+  jointSlackMin: null,
+} as const;
 
 export function monitorPour(input: PourMonitorInput): PourMonitor {
   const { deliveries, now, totalVolumeM3, tempC } = input;
@@ -114,85 +134,93 @@ export function monitorPour(input: PourMonitorInput): PourMonitor {
   const inbound = deliveries
     .filter((d) => !d.completedAt && (!d.arriveAt || d.arriveAt > now))
     .sort((a, b) => a.etaCurrentAt - b.etaCurrentAt);
-  const nextArrivalAt = inbound[0]?.etaCurrentAt ?? null;
+  const next = inbound[0] ?? null;
+  const nextArrivalAt = next?.etaCurrentAt ?? null;
+  const nextDeliveryId = next?.id ?? null;
 
-  if (remainingM3 <= 0) {
-    return {
-      pouredM3,
-      remainingM3,
-      currentPourEndAt,
-      nextArrivalAt,
-      gapMinutes: null,
-      level: 'ok',
-      message: '전 물량 타설이 끝났습니다.',
-      coldJointLimitMin,
-    };
-  }
-
-  if (!nextArrivalAt) {
-    return {
-      pouredM3,
-      remainingM3,
-      currentPourEndAt,
-      nextArrivalAt,
-      gapMinutes: null,
-      level: remainingM3 > 0 ? 'bad' : 'ok',
-      message: `남은 ${remainingM3}m³ 에 배차된 차량이 없습니다. 추가 주문이 필요합니다.`,
-      coldJointLimitMin,
-    };
-  }
-
-  // 지금 타설 중인 차가 없으면 "마지막으로 타설이 끝난 시각"부터 공백을 잰다
-  const lastDone = deliveries
-    .filter((d) => d.completedAt)
-    .sort((a, b) => b.completedAt! - a.completedAt!)[0];
-  const since = currentPourEndAt ?? lastDone?.completedAt ?? null;
-
-  if (since == null) {
-    return {
-      pouredM3,
-      remainingM3,
-      currentPourEndAt,
-      nextArrivalAt,
-      gapMinutes: null,
-      level: 'ok',
-      message: '첫 차 도착을 기다리는 중입니다.',
-      coldJointLimitMin,
-    };
-  }
-
-  const gapMinutes = Math.round((nextArrivalAt - since) / MIN);
-
-  let level: Level = 'ok';
-  let message: string;
-
-  if (gapMinutes >= coldJointLimitMin) {
-    level = 'bad';
-    message = `다음 차까지 ${gapMinutes}분 공백 — 이어치기 허용 시간간격 ${coldJointLimitMin}분을 넘습니다. 콜드조인트가 생깁니다. 즉시 다른 공장에 긴급 출하를 요청하거나 시공 이음을 계획하세요.`;
-  } else if (gapMinutes >= coldJointLimitMin * 0.7) {
-    level = 'bad';
-    message = `다음 차까지 ${gapMinutes}분 공백 — 이어치기 허용 ${coldJointLimitMin}분에 가까워지고 있습니다. 다른 공장 추가 출하를 검토하세요.`;
-  } else if (gapMinutes >= warnGap) {
-    level = 'warn';
-    message = `다음 차까지 ${gapMinutes}분 공백이 예상됩니다. 기준(${warnGap}분)을 넘었습니다.`;
-  } else {
-    message =
-      gapMinutes <= 0
-        ? '다음 차가 타설 종료 전에 도착합니다. 연속 타설이 유지됩니다.'
-        : `다음 차까지 ${gapMinutes}분 공백 — 연속 타설에 문제 없습니다.`;
-  }
-
-  return {
+  const base = {
     pouredM3,
     remainingM3,
     currentPourEndAt,
     nextArrivalAt,
-    gapMinutes,
-    level,
-    message,
+    nextDeliveryId,
     coldJointLimitMin,
   };
+
+  if (remainingM3 <= 0) {
+    return { ...base, ...NO_GAP, level: 'ok', message: '전 물량 타설이 끝났습니다.' };
+  }
+
+  if (nextArrivalAt == null) {
+    return {
+      ...base,
+      ...NO_GAP,
+      level: 'bad',
+      message: `남은 ${remainingM3}m³ 에 배차된 차량이 없습니다. 추가 주문이 필요합니다.`,
+    };
+  }
+
+  // 가장 최근에 타설이 끝난 차 — 지금 타설 중인 차가 없을 때 하층이 된다
+  const lastDone = deliveries
+    .filter((d) => d.completedAt)
+    .sort((a, b) => b.completedAt! - a.completedAt!)[0];
+
+  /**
+   * 하층 콘크리트를 실어 온 차. 지금 타설 중인 차가 있으면 그 차,
+   * 없으면 마지막으로 타설을 끝낸 차다. 둘 다 없으면 아직 첫 차 전이라
+   * 이어칠 하층 자체가 없다.
+   */
+  const lower = current ?? lastDone ?? null;
+
+  if (!lower) {
+    return { ...base, ...NO_GAP, level: 'ok', message: '첫 차 도착을 기다리는 중입니다.' };
+  }
+
+  // ① 타설 공백 — 현장이 실제로 노는 시간
+  const since = currentPourEndAt ?? lastDone?.completedAt ?? null;
+  const gapMinutes = since == null ? null : Math.round((nextArrivalAt - since) / MIN);
+
+  // ② 이어치기 시간간격 — KCS 표 3.3-1 의 정의 (하층 비비기 시작 ~ 상층 타설)
+  const jointIntervalMin = Math.round((nextArrivalAt - lower.mixStartAt) / MIN);
+  const jointSlackMin = coldJointLimitMin - jointIntervalMin;
+
+  let level: Level = 'ok';
+  let message: string;
+
+  if (jointSlackMin < 0) {
+    level = 'bad';
+    message =
+      `이어치기 시간간격이 ${jointIntervalMin}분으로 허용 ${coldJointLimitMin}분을 ` +
+      `${-jointSlackMin}분 넘었습니다. 콜드조인트가 생깁니다. 즉시 다른 공장에 긴급 출하를 ` +
+      `요청하거나 시공 이음을 계획하세요.`;
+  } else if (jointSlackMin < RULES.COLD_JOINT_MARGIN_MIN) {
+    level = 'bad';
+    message =
+      `이어치기 시간간격 ${jointIntervalMin}분 — 허용 ${coldJointLimitMin}분까지 ` +
+      `${jointSlackMin}분밖에 안 남았습니다. 다른 공장 추가 출하를 검토하세요.`;
+  } else if (gapMinutes != null && gapMinutes >= warnGap) {
+    level = 'warn';
+    message =
+      `다음 차까지 타설이 ${gapMinutes}분 멈춥니다 (기준 ${warnGap}분). ` +
+      `이어치기 시간간격은 ${jointIntervalMin}분으로 허용 ${coldJointLimitMin}분 안입니다.`;
+  } else if (gapMinutes != null && gapMinutes <= 0) {
+    message = `다음 차가 타설 종료 전에 도착합니다. 연속 타설이 유지됩니다.`;
+  } else {
+    message =
+      `다음 차까지 공백 ${gapMinutes ?? 0}분 — 이어치기 시간간격 ${jointIntervalMin}분으로 ` +
+      `허용 ${coldJointLimitMin}분 안입니다.`;
+  }
+
+  return {
+    ...base,
+    gapMinutes,
+    jointIntervalMin,
+    jointSlackMin,
+    level,
+    message,
+  };
 }
+
 
 /* ==========================================================================
  * 3. 4단계 자동 대응 — 공백이 생길 때 무엇을 할지
@@ -209,11 +237,19 @@ export function recommend(monitor: PourMonitor, remainingTrucks: number): Recomm
 
   const out: Recommendation[] = [];
 
-  if (monitor.gapMinutes != null && monitor.gapMinutes > 0) {
+  // 얼마나 앞당겨야 하는지 — 한도를 넘었으면 넘은 만큼, 아니면 공백만큼
+  const pullInMin =
+    monitor.jointSlackMin != null && monitor.jointSlackMin < 0
+      ? -monitor.jointSlackMin
+      : (monitor.gapMinutes ?? 0);
+
+  if (pullInMin > 0) {
     out.push({
       level: monitor.level,
-      action: '다음 차 출하를 앞당기기',
-      detail: `공장에 ${monitor.gapMinutes}분 앞당겨 비비기를 시작해 달라고 요청합니다. 제한시간(비비기~타설 완료) 안에 들어오는지 먼저 확인하세요.`,
+      action: `다음 차 출하를 ${pullInMin}분 앞당기기`,
+      detail:
+        `공장에 ${pullInMin}분 앞당겨 비비기를 시작해 달라고 요청합니다. ` +
+        `앞당긴 차가 제한시간(비비기~타설 완료) 안에 도착하는지 먼저 확인하세요.`,
     });
   }
 

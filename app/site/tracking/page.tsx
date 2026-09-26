@@ -155,13 +155,37 @@ function TrackingBody({ site }: { site: Site }) {
         )}
         {monitor.nextArrivalAt && <Row label="다음 차 도착">{clock(monitor.nextArrivalAt)}</Row>}
         {monitor.gapMinutes != null && (
-          <Row label="공백">
+          <Row label="타설 공백">
             {monitor.gapMinutes <= 0 ? '없음 (겹침)' : `${monitor.gapMinutes}분`}{' '}
             <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--color-concrete-mid)' }}>
-              이어치기 허용 {monitor.coldJointLimitMin}분
+              타설이 멈추는 시간
             </span>
           </Row>
         )}
+        {monitor.jointIntervalMin != null && (
+          <Row label="이어치기 간격">
+            <span
+              style={{
+                color:
+                  monitor.jointSlackMin != null && monitor.jointSlackMin < 0
+                    ? 'var(--color-bad)'
+                    : undefined,
+              }}
+            >
+              {monitor.jointIntervalMin}분 / 허용 {monitor.coldJointLimitMin}분
+            </span>{' '}
+            <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--color-concrete-mid)' }}>
+              {monitor.jointSlackMin != null && monitor.jointSlackMin >= 0
+                ? `${monitor.jointSlackMin}분 남음`
+                : `${-(monitor.jointSlackMin ?? 0)}분 초과`}
+            </span>
+          </Row>
+        )}
+
+        <p style={{ fontSize: '0.74rem', color: 'var(--color-concrete-mid)', margin: '10px 0 0' }}>
+          이어치기 간격은 KCS 14 20 10 표 3.3-1 의 정의(하층 비비기 시작 ~ 상층 타설)로 잽니다.
+          타설 공백과는 다른 숫자입니다.
+        </p>
 
         {actions.length > 0 && (
           <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
