@@ -120,3 +120,167 @@ export function MockNotice({ children }: { children?: ReactNode }) {
     </p>
   );
 }
+
+/* ==========================================================================
+ * 대시보드 조각
+ *
+ * 현장·공장 현황판이 같은 모양을 써야 해서 여기에 둔다.
+ * 숫자를 크게, 단위를 작게 — 현장에서 장갑 낀 채 흘깃 보는 화면이다.
+ * ======================================================================== */
+
+const TONE_COLOR: Record<Tone, string | undefined> = {
+  ok: 'var(--color-ok)',
+  warn: 'var(--color-warn)',
+  bad: 'var(--color-bad)',
+  info: 'var(--color-info)',
+  accent: 'var(--color-rust)',
+  muted: undefined,
+};
+
+/** 지표 타일 한 칸 */
+export function Stat({
+  label,
+  value,
+  unit,
+  tone = 'muted',
+  hint,
+}: {
+  label: string;
+  value: ReactNode;
+  unit?: string;
+  tone?: Tone;
+  hint?: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: '10px 12px',
+        background: 'var(--color-paper)',
+        border: '1px solid var(--color-line)',
+        borderRadius: 'var(--radius-sharp)',
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: '0.72rem',
+          color: 'var(--color-concrete-mid)',
+          marginBottom: 4,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '1.35rem',
+          lineHeight: 1.1,
+          fontWeight: 600,
+          color: TONE_COLOR[tone] ?? 'var(--color-concrete-dark)',
+          wordBreak: 'keep-all',
+        }}
+      >
+        {value}
+        {unit && (
+          <span style={{ fontSize: '0.78rem', fontWeight: 400, marginLeft: 2 }}>{unit}</span>
+        )}
+      </div>
+      {hint && (
+        <div style={{ fontSize: '0.72rem', color: 'var(--color-concrete-mid)', marginTop: 3 }}>
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 지표 타일을 폭에 맞춰 늘어놓는다 */
+export function StatGrid({ children, min = 108 }: { children: ReactNode; min?: number }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`,
+        gap: 8,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** 진행률 막대 */
+export function Bar({
+  done,
+  total,
+  tone = 'accent',
+  height = 6,
+}: {
+  done: number;
+  total: number;
+  tone?: Tone;
+  height?: number;
+}) {
+  const pct = total > 0 ? Math.min(100, Math.max(0, (done / total) * 100)) : 0;
+  return (
+    <div
+      style={{
+        height,
+        background: 'var(--color-paper)',
+        border: '1px solid var(--color-line)',
+        borderRadius: 3,
+        overflow: 'hidden',
+      }}
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        style={{
+          width: `${pct}%`,
+          height: '100%',
+          background: TONE_COLOR[tone] ?? 'var(--color-rust)',
+          transition: 'width .4s',
+        }}
+      />
+    </div>
+  );
+}
+
+/** 눈에 띄어야 하는 알림 한 줄 */
+export function Alert({
+  tone,
+  title,
+  children,
+}: {
+  tone: Tone;
+  title: ReactNode;
+  children?: ReactNode;
+}) {
+  const color = TONE_COLOR[tone] ?? 'var(--color-concrete-wet)';
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 10,
+        padding: '10px 12px',
+        background: 'var(--color-paper)',
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 'var(--radius-sharp)',
+      }}
+    >
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <strong style={{ fontSize: '0.88rem', display: 'block', color }}>{title}</strong>
+        {children && (
+          <span style={{ fontSize: '0.82rem', color: 'var(--color-concrete-wet)', lineHeight: 1.5 }}>
+            {children}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}

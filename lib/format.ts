@@ -35,6 +35,18 @@ export function remaining(at: number, now: number) {
   return m < 0 ? `${duration(-m)} 지남` : duration(m);
 }
 
+/**
+ * 타설 기한까지 남은 시간.
+ *
+ * "지금으로부터 남은 시간"만 쓰면 도착 예상이 이미 기한을 넘긴 차도
+ * "1시간 남음"으로 보인다 — 배지는 빨간데 글자는 안심시키는 꼴이 된다.
+ * 그래서 도착 예상과 지금 중 늦은 쪽을 기준으로 잰다.
+ */
+export function limitRemaining(limitAt: number, etaAt: number, now: number) {
+  const over = Math.round((Math.max(now, etaAt) - limitAt) / MIN);
+  return over > 0 ? `${duration(over)} 초과 예상` : `${remaining(limitAt, now)} 남음`;
+}
+
 /** +7분 늦음 / -3분 빠름 / 예상대로 */
 export function delayText(delayMinutes: number) {
   if (delayMinutes > 0) return `${delayMinutes}분 늦음`;

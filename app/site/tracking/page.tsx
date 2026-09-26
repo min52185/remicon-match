@@ -13,7 +13,7 @@ import KakaoMap, { type MapMarker, type MapPath } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { analyzeDelay, monitorPour, recommend } from '@/lib/ai/predict';
-import { clock, delayText, duration, m3, remaining } from '@/lib/format';
+import { clock, delayText, duration, limitRemaining, m3, remaining } from '@/lib/format';
 import { DeliveryRules, MIN, PHASE_LABEL, PHASE_TONE, specText } from '@/lib/rules';
 import { getPosition, type Position } from '@/lib/services/tracking';
 import { markCompleted, updateEta } from '@/lib/store';
@@ -272,7 +272,7 @@ function DeliveryCard({ d, pos, now }: { d: Delivery; pos: Position; now: number
       <Row label="비비기 시작">{clock(d.mixStartAt)}</Row>
       <Row label="타설 기한">
         {clock(d.limitAt)}{' '}
-        <Tag tone={limitLevel}>{remaining(d.limitAt, now)} 남음</Tag>
+        <Tag tone={limitLevel}>{limitRemaining(d.limitAt, d.etaCurrentAt, now)}</Tag>
       </Row>
       <Row label="이동">
         {duration(d.travelMinutes)} · {d.distanceKm}km

@@ -4,8 +4,20 @@
     {
       "name": "remicon-match",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "remicon-match-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:demo"
+      ],
+      "port": 3001
     }
   ]
 }

@@ -17,6 +17,7 @@ import AppShell from './AppShell';
 import {
   IconDoc,
   IconFactory,
+  IconGauge,
   IconInbox,
   IconOrder,
   IconPin,
@@ -120,6 +121,7 @@ export function SiteShell({ title, description, showClock, children }: ShellProp
   ).length;
 
   const tabs = [
+    { href: '/site', label: '현황', icon: <IconGauge />, exact: true },
     { href: '/site/order', label: '주문', icon: <IconOrder /> },
     { href: '/site/favorites', label: '즐겨찾기', icon: <IconStar /> },
     { href: '/site/allocate', label: 'AI 배분', icon: <IconSliders /> },

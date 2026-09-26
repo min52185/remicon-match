@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DriverShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
-import { clock, duration, failure, m3, remaining } from '@/lib/format';
+import { clock, duration, failure, limitRemaining, m3 } from '@/lib/format';
 import { DeliveryRules, PHASE_LABEL, PHASE_TONE, specText } from '@/lib/rules';
 import { claimTruck, markArrived, markCompleted, pushLocation, releaseTruck } from '@/lib/store';
 import { useDb, useMounted, useNow } from '@/lib/store/hooks';
@@ -278,7 +278,7 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
       <Row label="타설 기한">
         {clock(delivery.limitAt)}{' '}
         <Tag tone={DeliveryRules.limitLevel(delivery, now)}>
-          {remaining(delivery.limitAt, now)} 남음
+          {limitRemaining(delivery.limitAt, delivery.etaCurrentAt, now)}
         </Tag>
       </Row>
       <Row label="이동">

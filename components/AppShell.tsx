@@ -14,6 +14,11 @@ export interface TabDef {
   icon: ReactNode;
   /** 숫자를 넣으면 배지가 붙는다 (새 주문 알림 등) */
   badge?: number;
+  /**
+   * 하위 경로까지 활성으로 볼지. '/site' 처럼 다른 탭의 앞부분이 되는 주소는
+   * exact 를 켜야 한다 — 안 그러면 '/site/order' 에서 두 탭이 같이 켜진다.
+   */
+  exact?: boolean;
 }
 
 interface Props {
@@ -65,7 +70,9 @@ export default function AppShell({
 
       <nav className={`${s.tabs} no-print`} aria-label="화면 이동">
         {tabs.map((t) => {
-          const active = pathname === t.href || pathname.startsWith(`${t.href}/`);
+          const active = t.exact
+            ? pathname === t.href
+            : pathname === t.href || pathname.startsWith(`${t.href}/`);
           return (
             <Link
               key={t.href}
