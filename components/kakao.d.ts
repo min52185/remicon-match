@@ -49,6 +49,15 @@ export interface KakaoMaps {
     strokeStyle?: string;
     map?: KakaoMap;
   }) => KakaoOverlay;
+  /** 지도 클릭으로 좌표를 고를 때 쓴다 (현장·공장 등록) */
+  event: {
+    addListener(target: KakaoMap, type: 'click', handler: (e: KakaoMouseEvent) => void): void;
+    removeListener(target: KakaoMap, type: 'click', handler: (e: KakaoMouseEvent) => void): void;
+  };
+}
+
+export interface KakaoMouseEvent {
+  latLng: KakaoLatLng;
 }
 
 declare global {

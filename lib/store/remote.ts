@@ -51,7 +51,15 @@ import type {
   Plant,
   TruckLocation,
 } from '../types';
-import { emptyDb, type Db, type DispatchInput, type NewOrder } from './shared';
+import {
+  emptyDb,
+  type Db,
+  type DispatchInput,
+  type NewOrder,
+  type NewPlant,
+  type NewSite,
+  type NewTruck,
+} from './shared';
 
 /* ==========================================================================
  * 캐시와 구독
@@ -516,4 +524,131 @@ export async function releaseTruck(truckId: string) {
   const { error } = await sb.from('trucks').update({ driver_id: null }).eq('id', truckId);
   if (error) throw error;
   await refresh();
+}
+
+/* ==========================================================================
+ * 등록 — 현장·공장·차량
+ *
+ * 소속 회사는 받지 않고 내 프로필에서 읽는다. 폼에서 받으면 남의 회사에
+ * 현장을 끼워 넣을 수 있다 — RLS 도 막지만, 애초에 보내지 않는 편이 낫다.
+ * ======================================================================== */
+
+/** 내 소속 회사. 없으면 등록할 수 없다 (가입할 때 회사를 골라야 한다). */
+async function myCompanyId(sb: SupabaseClient): Promise<string> {
+  const uid = await myId(sb);
+  if (!uid) throw new Error('로그인이 필요합니다.');
+  const { data, error } = await sb
+    .from('profiles')
+    .select('company_id')
+    .eq('id', uid)
+    .single<{ company_id: string | null }>();
+  if (error) throw error;
+  if (!data?.company_id) throw new Error('소속 회사가 없습니다. 로그인 후 회사를 골라 주세요.');
+  return data.company_id;
+}
+
+export async function createSite(input: NewSite): Promise<string> {
+  const sb = client();
+  const companyId = await myCompanyId(sb);
+
+  const { data, error } = await sb
+    .from('sites')
+    .insert({
+      company_id: companyId,
+      name: input.name,
+      address: input.address,
+      lat: input.lat,
+      lng: input.lng,
+      access_note: input.accessNote ?? null,
+    })
+    .select('id')
+    .single<{ id: string }>();
+  if (error) throw error;
+
+  await refresh();
+  return data.id;
+}
+
+export async function createPlant(input: NewPlant): Promise<string> {
+  const sb = client();
+  const companyId = await myCompanyId(sb);
+
+  const { data, error } = await sb
+    .from('plants')
+    .insert({
+      company_id: companyId,
+      name: input.name,
+      address: input.address,
+      lat: input.lat,
+      lng: input.lng,
+      phone: input.phone || null,
+      capability: input.cap,
+      fleet_size: input.fleetSize,
+      hourly_rate: input.hourlyRate,
+    })
+    .select('id')
+    .single<{ id: string }>();
+  if (error) throw error;
+
+  // 출하 현황 행을 같이 만든다. 없으면 현장 화면에서 '출하 여력 없음' 으로만 보이고
+  // 공장이 값을 적을 곳도 없다.
+  const { error: statusErr } = await sb.from('plant_status').insert({
+    plant_id: data.id,
+    available_trucks: 0,
+    available_volume: 0,
+    is_open: false,
+    updated_at: new Date().toISOString(),
+  });
+  if (statusErr) throw statusErr;
+
+  await refresh();
+  return data.id;
+}
+
+export async function updatePlantInfo(
+  plantId: string,
+  patch: Partial<
+    Pick<Plant, 'name' | 'address' | 'phone' | 'lat' | 'lng' | 'fleetSize' | 'hourlyRate' | 'cap'>
+  >,
+) {
+  const sb = client();
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.address !== undefined) row.address = patch.address;
+  if (patch.phone !== undefined) row.phone = patch.phone || null;
+  if (patch.lat !== undefined) row.lat = patch.lat;
+  if (patch.lng !== undefined) row.lng = patch.lng;
+  if (patch.fleetSize !== undefined) row.fleet_size = patch.fleetSize;
+  if (patch.hourlyRate !== undefined) row.hourly_rate = patch.hourlyRate;
+  if (patch.cap !== undefined) row.capability = patch.cap;
+
+  const { error } = await sb.from('plants').update(row).eq('id', plantId);
+  if (error) throw error;
+  await refresh();
+}
+
+export async function createTruck(input: NewTruck): Promise<string> {
+  const sb = client();
+  const uid = await myId(sb);
+
+  // 호차 번호는 그 공장에서 쓰지 않은 가장 작은 수 (unique(plant_id, no) 제약이 있다)
+  const used = new Set(db.trucks.filter((t) => t.plantId === input.plantId).map((t) => t.no));
+  let no = 1;
+  while (used.has(no)) no += 1;
+
+  const { data, error } = await sb
+    .from('trucks')
+    .insert({
+      plant_id: input.plantId,
+      no,
+      plate_no: input.plateNo,
+      capacity_m3: input.capacityM3,
+      driver_id: input.claim ? uid : null,
+    })
+    .select('id')
+    .single<{ id: string }>();
+  if (error) throw error;
+
+  await refresh();
+  return data.id;
 }

@@ -127,6 +127,7 @@ export function SiteShell({ title, description, showClock, children }: ShellProp
     { href: '/site/allocate', label: 'AI 배분', icon: <IconSliders /> },
     { href: '/site/tracking', label: '추적', icon: <IconTruck />, badge: pendingOrders },
     { href: '/site/orders', label: '납품서', icon: <IconDoc /> },
+    { href: '/site/sites', label: '현장', icon: <IconPin /> },
   ];
 
   if (pending) return <Loading />;
@@ -166,6 +167,8 @@ export function SiteShell({ title, description, showClock, children }: ShellProp
           total={db.sites.length}
           myCompany={profile?.companyId}
           theirCompanies={db.sites.map((x) => x.companyId)}
+          addHref="/site/sites"
+          addLabel="현장 등록하러 가기"
         />
       )}
     </AppShell>
@@ -297,12 +300,17 @@ function NoneYet({
   total,
   myCompany,
   theirCompanies,
+  addHref,
+  addLabel,
 }: {
   what: string;
   loaded: boolean;
   total: number;
   myCompany: string | null | undefined;
   theirCompanies: (string | undefined)[];
+  /** 직접 등록할 수 있으면 그 화면으로 보낸다 */
+  addHref?: string;
+  addLabel?: string;
 }) {
   if (!loaded) return <Empty>불러오는 중…</Empty>;
 
@@ -333,6 +341,12 @@ function NoneYet({
           <code style={{ fontFamily: 'var(--font-mono)' }}>{unique.join(', ') || '없음'}</code>
         </Row>
       </div>
+
+      {addHref && (
+        <Link href={addHref} className="btn btn-primary btn-block" style={{ marginTop: 14 }}>
+          {addLabel ?? '직접 등록하기'}
+        </Link>
+      )}
 
       <p style={{ fontSize: '0.82rem', color: 'var(--color-concrete-mid)', margin: '12px 0 0' }}>
         두 id 가 다르면 로그아웃 후 다시 가입하면서 회사를 맞춰 고르거나, Supabase{' '}

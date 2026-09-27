@@ -96,3 +96,29 @@ export const favoritesOfSite = (d: Db, siteId: string) =>
 
 export const locationsOfDelivery = (d: Db, deliveryId: string) =>
   d.truckLocations.filter((l) => l.deliveryId === deliveryId);
+
+/* ==========================================================================
+ * 등록 — 현장·공장·차량을 직접 만든다
+ * ======================================================================== */
+
+/** 현장 등록 입력. 소속 회사는 로그인한 계정에서 가져오므로 받지 않는다. */
+export type NewSite = Omit<Site, 'id' | 'companyId'>;
+
+/**
+ * 공장 등록 입력.
+ * 출하 현황(availableTrucks·availableVolume·isOpen)은 등록 직후 공장이
+ * 출하 현황 화면에서 따로 적는다 — 등록 폼에서 한꺼번에 받으면 너무 길다.
+ */
+export type NewPlant = Omit<
+  Plant,
+  'id' | 'companyId' | 'availableTrucks' | 'availableVolume' | 'isOpen' | 'updatedAt'
+>;
+
+/** 차량 등록 입력. 소속 공장은 고르게 한다(한 회사가 공장을 여럿 가질 수 있다). */
+export interface NewTruck {
+  plantId: string;
+  plateNo: string;
+  capacityM3: number;
+  /** 등록하면서 바로 내 차로 가져갈지 (기사가 직접 등록하는 경우) */
+  claim?: boolean;
+}

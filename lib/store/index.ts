@@ -54,3 +54,10 @@ export const markCompleted = backend.markCompleted;
 export const pushLocation = backend.pushLocation;
 export const claimTruck = backend.claimTruck;
 export const releaseTruck = backend.releaseTruck;
+
+/* ── 등록 ── */
+export type { NewPlant, NewSite, NewTruck } from './shared';
+export const createSite = backend.createSite;
+export const createPlant = backend.createPlant;
+export const updatePlantInfo = backend.updatePlantInfo;
+export const createTruck = backend.createTruck;

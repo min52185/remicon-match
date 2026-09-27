@@ -27,7 +27,15 @@ import type {
   TruckLocation,
 } from '../types';
 import { SEED_PLANTS, SEED_SITES, SEED_TRUCKS } from './seed';
-import { emptyDb as blankDb, type Db, type DispatchInput, type NewOrder } from './shared';
+import {
+  emptyDb as blankDb,
+  type Db,
+  type DispatchInput,
+  type NewOrder,
+  type NewPlant,
+  type NewSite,
+  type NewTruck,
+} from './shared';
 
 const KEY = 'remicon.db.v1';
 
@@ -67,12 +75,31 @@ function load(): Db {
         },
       ]),
     );
+    /**
+     * 시연 데이터는 코드의 최신 seed 를 쓰되(생산 능력 표가 바뀔 수 있다),
+     * 사용자가 직접 등록한 현장·공장·차량은 지우지 않는다.
+     * seed 에 없는 id 면 사용자가 만든 것이다.
+     */
+    const seedIds = {
+      sites: new Set(SEED_SITES.map((x) => x.id)),
+      plants: new Set(SEED_PLANTS.map((x) => x.id)),
+      trucks: new Set(SEED_TRUCKS.map((x) => x.id)),
+    };
+    const mine = {
+      sites: (parsed.sites ?? []).filter((x) => !seedIds.sites.has(x.id)),
+      plants: (parsed.plants ?? []).filter((x) => !seedIds.plants.has(x.id)),
+      trucks: (parsed.trucks ?? []).filter((x) => !seedIds.trucks.has(x.id)),
+    };
+
     return {
       ...emptyDb(),
       ...parsed,
-      sites: SEED_SITES,
-      trucks: SEED_TRUCKS,
-      plants: SEED_PLANTS.map((p) => ({ ...p, ...(savedStatus.get(p.id) ?? {}) })),
+      sites: [...SEED_SITES, ...mine.sites],
+      trucks: [...SEED_TRUCKS, ...mine.trucks],
+      plants: [
+        ...SEED_PLANTS.map((p) => ({ ...p, ...(savedStatus.get(p.id) ?? {}) })),
+        ...mine.plants,
+      ],
     };
   } catch {
     return emptyDb();
@@ -363,4 +390,70 @@ export async function releaseTruck(truckId: string) {
     ...d,
     trucks: d.trucks.map((t) => (t.id === truckId ? { ...t, driverId: undefined } : t)),
   }));
+}
+
+/* ==========================================================================
+ * 쓰기 — 등록
+ *
+ * 브라우저 저장소 모드에서는 소속 회사가 없다(로그인이 없다). 등록한 자료는
+ * companyId 없이 저장되고, RoleShells 가 '소속 없는 것은 누구나 본다'로
+ * 다루므로 시연에 지장이 없다.
+ * ======================================================================== */
+
+export async function createSite(input: NewSite): Promise<string> {
+  ensureHydrated();
+  const id = `s${Date.now().toString(36)}`;
+  commit({ ...db, sites: [...db.sites, { ...input, id }] });
+  return id;
+}
+
+export async function createPlant(input: NewPlant): Promise<string> {
+  ensureHydrated();
+  const id = `p${Date.now().toString(36)}`;
+  const plant: Plant = {
+    ...input,
+    id,
+    // 등록 직후에는 아직 아무것도 못 내보낸다. 공장이 출하 현황에서 채운다.
+    availableTrucks: 0,
+    availableVolume: 0,
+    isOpen: false,
+    updatedAt: Date.now(),
+  };
+  commit({ ...db, plants: [...db.plants, plant] });
+  return id;
+}
+
+/** 공장 정보·생산 능력 고치기 (출하 현황과 달리 자주 바뀌지 않는 값) */
+export async function updatePlantInfo(
+  plantId: string,
+  patch: Partial<Pick<Plant, 'name' | 'address' | 'phone' | 'lat' | 'lng' | 'fleetSize' | 'hourlyRate' | 'cap'>>,
+) {
+  update((d) => ({
+    ...d,
+    plants: d.plants.map((p) => (p.id === plantId ? { ...p, ...patch } : p)),
+  }));
+}
+
+/** 시연 모드에는 로그인이 없다 — 내 차로 가져가면 이 id 를 쓴다 */
+const DEMO_DRIVER_ID = 'demo-driver';
+
+export async function createTruck(input: NewTruck): Promise<string> {
+  ensureHydrated();
+  const id = `t${Date.now().toString(36)}`;
+  // 호차 번호는 그 공장에서 쓰지 않은 가장 작은 수로 자동 부여한다
+  const used = new Set(db.trucks.filter((t) => t.plantId === input.plantId).map((t) => t.no));
+  let no = 1;
+  while (used.has(no)) no += 1;
+
+  const truck: Truck = {
+    id,
+    plantId: input.plantId,
+    no,
+    plateNo: input.plateNo,
+    driver: input.claim ? '배정됨' : '미배정',
+    driverId: input.claim ? DEMO_DRIVER_ID : undefined,
+    capacityM3: input.capacityM3,
+  };
+  commit({ ...db, trucks: [...db.trucks, truck] });
+  return id;
 }

@@ -38,11 +38,23 @@ interface Props {
   /** 지정하지 않으면 마커가 전부 보이도록 맞춘다 */
   center?: { lat: number; lng: number };
   level?: number;
+  /**
+   * 지도를 눌러 좌표를 고르게 한다 (현장·공장 등록).
+   * 주면 커서가 십자로 바뀌고, 누른 지점의 위도·경도를 돌려준다.
+   */
+  onPick?: (at: { lat: number; lng: number }) => void;
 }
 
 const SDK_ID = 'kakao-maps-sdk';
 
-export default function KakaoMap({ markers, paths = [], height = 360, center, level }: Props) {
+export default function KakaoMap({
+  markers,
+  paths = [],
+  height = 360,
+  center,
+  level,
+  onPick,
+}: Props) {
   const key = process.env.NEXT_PUBLIC_KAKAO_JS_KEY;
   const boxRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KMap | null>(null);
@@ -95,6 +107,19 @@ export default function KakaoMap({ markers, paths = [], height = 360, center, le
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // ── 지도를 눌러 좌표 고르기 ──
+  useEffect(() => {
+    const map = mapRef.current;
+    const kakao = window.kakao;
+    if (status !== 'ready' || !map || !kakao || !onPick) return;
+
+    const handler = (e: { latLng: { getLat(): number; getLng(): number } }) => {
+      onPick({ lat: e.latLng.getLat(), lng: e.latLng.getLng() });
+    };
+    kakao.maps.event.addListener(map, 'click', handler);
+    return () => kakao.maps.event.removeListener(map, 'click', handler);
+  }, [status, onPick]);
+
   // ── 마커·경로 다시 그리기 ──
   useEffect(() => {
     const map = mapRef.current;
@@ -142,15 +167,17 @@ export default function KakaoMap({ markers, paths = [], height = 360, center, le
   }, [status, markers, paths, center, level]);
 
   return (
-    <div className={s.box} style={{ height }}>
+    <div className={s.box} style={{ height, cursor: onPick ? 'crosshair' : undefined }}>
       {key ? (
         <>
           <div ref={boxRef} className={s.canvas} />
           {status === 'loading' && <div className={s.loading}>지도 불러오는 중…</div>}
-          {status === 'failed' && <FallbackMap markers={markers} paths={paths} reason="sdk" />}
+          {status === 'failed' && (
+            <FallbackMap markers={markers} paths={paths} reason="sdk" onPick={onPick} />
+          )}
         </>
       ) : (
-        <FallbackMap markers={markers} paths={paths} reason="nokey" />
+        <FallbackMap markers={markers} paths={paths} reason="nokey" onPick={onPick} />
       )}
     </div>
   );
@@ -182,10 +209,12 @@ function FallbackMap({
   markers,
   paths,
   reason,
+  onPick,
 }: {
   markers: MapMarker[];
   paths: MapPath[];
   reason: 'nokey' | 'sdk';
+  onPick?: (at: { lat: number; lng: number }) => void;
 }) {
   const pts = [
     ...markers.map((m) => [m.lat, m.lng] as [number, number]),
@@ -206,9 +235,31 @@ function FallbackMap({
   // 위도는 위가 큰 값이므로 뒤집는다
   const y = (lat: number) => (1 - (lat - minLat) / (maxLat - minLat || 1)) * (H * (1 - 2 * pad)) + H * pad;
 
+  /**
+   * 대체 지도에서도 좌표를 고를 수 있어야 한다 — 카카오 키가 없는 조원도 현장을
+   * 등록해 봐야 하기 때문이다. 화면 좌표를 위도·경도로 되돌린다(위에서 쓴 식의 역).
+   */
+  const pickFromSvg = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!onPick) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * W;
+    const py = ((e.clientY - r.top) / r.height) * H;
+    const fx = (px - W * pad) / (W * (1 - 2 * pad));
+    const fy = (py - H * pad) / (H * (1 - 2 * pad));
+    onPick({
+      lat: minLat + (1 - fy) * (maxLat - minLat || 1),
+      lng: minLng + fx * (maxLng - minLng || 1),
+    });
+  };
+
   return (
     <div className={s.fallback}>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{ width: '100%', height: '100%', cursor: onPick ? 'crosshair' : undefined }}
+        onClick={onPick ? pickFromSvg : undefined}
+      >
         <rect width="100" height="100" fill="#e9e7e2" />
         {[20, 40, 60, 80].map((g) => (
           <g key={g} stroke="#d6d3cd" strokeWidth="0.2">

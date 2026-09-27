@@ -107,6 +107,9 @@
   color: var(--color-concrete-mid);
   text-decoration: none;
   border-top: 2px solid transparent;
+  /* 탭이 늘어도 두 줄로 접히지 않게 — 접히면 바 높이가 들쭉날쭉해진다 */
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .tab svg {
