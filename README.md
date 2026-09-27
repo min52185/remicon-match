@@ -82,14 +82,23 @@ npm test
 
 ### Supabase (지시서 0-8)
 
-> **이미 DB 를 만들어 두셨다면 `0003_urgent.sql` 과 `0004_registration.sql` 을 순서대로 실행하세요.**
-> `0003` 없이는 **주문을 넣을 때마다 실패합니다** (앱이 없는 열에 값을 넣으려 하기 때문입니다).
-> `0004` 없이는 **현장·공장·차량 등록과 사진 올리기가 권한 오류로 막힙니다.**
-> 화면에는 각각 "DB 에 없는 항목입니다", "권한이 없습니다" 로 뜹니다.
+> **이미 DB 를 만들어 두셨다면 `0003` → `0004` → `0005` 를 하나씩 실행하세요.**
+> 없으면 각각 이렇게 막힙니다.
+>
+> | 안 돌리면 | 화면에 뜨는 말 |
+> | --- | --- |
+> | `0003_urgent` | 주문이 전부 실패 — "DB 에 없는 항목입니다" |
+> | `0004_registration` | 현장·공장·차량 등록이 막힘 — "권한이 없습니다" |
+> | `0005_photo_storage` | 사진만 안 올라감 — "사진 저장소(버킷)가 아직 없습니다" |
+>
+> **한 파일씩 따로 돌리세요.** SQL Editor 는 스크립트 전체를 한 트랜잭션으로 실행해서,
+> 뒤쪽 한 줄이 실패하면 앞의 `alter table` 까지 전부 되돌립니다. 붙여서 돌리면
+> 하나도 안 들어간 것처럼 보입니다.
 
 1. <https://supabase.com> → 프로젝트 생성 (Region: **Northeast Asia (Seoul)**)
-2. **SQL Editor** 에서 `0001_init.sql` → `0002_seed.sql` → `0003_urgent.sql` → `0004_registration.sql` 순서로 실행
-   (`0003` 긴급 배차, `0004` 등록 권한·사진 버킷. 이미 만든 DB 에 다시 돌려도 안전합니다.)
+2. **SQL Editor** 에서 `supabase/migrations` 의 파일을 **하나씩, 번호 순서대로** 실행
+   (`0001` 스키마+RLS · `0002` 시연 데이터 · `0003` 긴급 배차 · `0004` 등록 권한 · `0005` 사진 저장소.
+   다시 돌려도 안전합니다.)
    마지막에 **회사 13 / 현장 3 / 공장 12 / 출하현황 12 / 차량 139** 가 나오면 성공
 3. **Authentication → Sign In / Providers → User Signups** 에서 **Confirm email 끄기**
    (가상 이메일로 계정을 만들 것이라 인증 메일을 받을 수 없습니다)
@@ -99,6 +108,52 @@ npm test
 어느 키가 비었는지, 길찾기·기상청이 실제로 응답하는지, 지도 SDK 가 정말 떴는지,
 로그인한 계정으로 몇 행이 읽히는지를 한 화면에서 알려 줍니다.
 **키를 고쳤으면 개발 서버를 껐다 켜야 반영됩니다.**
+
+### 사진 저장소 — `0005` 가 "실패" 라고 찍었을 때
+
+`storage.objects` 는 소유자가 `supabase_storage_admin` 이라, 프로젝트에 따라 SQL Editor 에서
+정책을 만들 수 없습니다. `0005` 는 그래도 멈추지 않고 무엇이 안 됐는지 찍어 줍니다.
+아래를 손으로 하면 됩니다. **사진 말고 다른 기능은 전부 정상입니다.**
+
+**① 버킷 만들기** — 왼쪽 **Storage** → **New bucket**, 두 번 반복
+
+| 이름 | Public |
+| --- | --- |
+| `driver-photos` | **꺼짐** |
+| `delivery-notes` | **꺼짐** |
+
+> Public 을 켜면 주소를 아는 누구나 기사 얼굴 사진을 열 수 있습니다. 반드시 꺼 두세요.
+
+**② 정책 만들기** — 버킷을 고르고 **Policies** → **New policy** → **For full customization**
+
+버킷마다 아래 네 개를 만듭니다 (이름은 아무거나).
+
+| 하는 일 | Allowed operation | 조건에 넣을 식 |
+| --- | --- | --- |
+| 올리기 | INSERT | `(storage.foldername(name))[1] = auth.uid()::text` |
+| 고치기 | UPDATE | 〃 |
+| 지우기 | DELETE | 〃 |
+| 보기 | SELECT | 아래 식 |
+
+보기(SELECT)에 넣을 식 — 본인, 같은 회사 사람, 그리고 **지금 내 현장으로 오는 기사**까지:
+
+```sql
+(storage.foldername(name))[1] = auth.uid()::text
+or (storage.foldername(name))[1] in (
+  select p.id::text from profiles p where p.company_id = my_company_id()
+)
+or (storage.foldername(name))[1] in (
+  select t.driver_id::text
+  from deliveries d
+  join trucks t on t.id = d.truck_id
+  join sites s on s.id = d.site_id
+  where s.company_id = my_company_id() and t.driver_id is not null
+)
+```
+
+Target roles 는 `authenticated` 로 둡니다.
+
+> 경로 첫 칸이 올린 사람의 계정 id 라서, 이 한 칸만 비교하면 남의 사진에 덮어쓰는 것을 막을 수 있습니다.
 
 ---
 
@@ -185,7 +240,7 @@ lib/
   ai/allocate.ts        배분 최적화
   ai/predict.ts         지연 예측 · 콜드조인트 경고
 components/             KakaoMap · SpecPicker · 역할 껍데기 등
-supabase/migrations/    0001_init(스키마+RLS) · 0002_seed(시연 데이터) · 0003_urgent(긴급 배차) · 0004_registration(등록 권한·사진)
+supabase/migrations/    0001_init · 0002_seed · 0003_urgent · 0004_registration · 0005_photo_storage
 docs/prototype-a.html   기존 프로토타입 (참고용, 고치지 않음)
 tests/                  vitest
 ```

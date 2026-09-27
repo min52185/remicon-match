@@ -99,6 +99,29 @@ const localDel = (path: string) => {
   }
 };
 
+/**
+ * 저장소 오류를 사람이 읽을 수 있는 한 줄로.
+ *
+ * 사진은 SQL 만으로 끝나지 않는다 — 버킷이 있어야 하고 정책도 있어야 한다.
+ * 둘 중 무엇이 빠졌는지에 따라 할 일이 다른데, 원문은 영어 코드뿐이라
+ * 무엇을 고쳐야 하는지 알 수가 없다.
+ */
+function storageFailure(e: unknown, fallback: string): Error {
+  const msg = e instanceof Error ? e.message : String(e ?? '');
+
+  if (/bucket not found/i.test(msg)) {
+    return new Error(
+      `${fallback} 사진 저장소(버킷)가 아직 없습니다 — 0005_photo_storage.sql 을 실행하거나 Storage 에서 버킷을 만들어 주세요.`,
+    );
+  }
+  if (/row-level security|new row violates|403|unauthorized/i.test(msg)) {
+    return new Error(
+      `${fallback} 저장소 권한이 없습니다 — 0005_photo_storage.sql 의 접근 정책이 들어갔는지 확인해 주세요.`,
+    );
+  }
+  return new Error(msg ? `${fallback} (${msg})` : fallback);
+}
+
 /* ==========================================================================
  * 올리기 · 보기 · 지우기
  * ======================================================================== */
@@ -121,7 +144,7 @@ export async function uploadPhoto(file: File, kind: PhotoKind, path: string): Pr
   const { error } = await sb.storage
     .from(PRESET[kind].bucket)
     .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-  if (error) throw error;
+  if (error) throw storageFailure(error, '사진을 올리지 못했습니다.');
 
   return path;
 }
@@ -154,7 +177,7 @@ export async function deletePhoto(kind: PhotoKind, path: string): Promise<void> 
   const sb = getSupabase();
   if (!sb) return;
   const { error } = await sb.storage.from(PRESET[kind].bucket).remove([path]);
-  if (error) throw error;
+  if (error) throw storageFailure(error, '사진을 지우지 못했습니다.');
 }
 
 /* ==========================================================================
