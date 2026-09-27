@@ -90,6 +90,7 @@ npm test
 > | `0003_urgent` | 주문이 전부 실패 — "DB 에 없는 항목입니다" |
 > | `0004_registration` | 현장·공장·차량 등록이 막힘 — "권한이 없습니다" |
 > | `0005_photo_storage` | 사진만 안 올라감 — "사진 저장소(버킷)가 아직 없습니다" |
+> | `0006_driver_visible_to_site` | 현장 추적에 기사 이름이 "배정됨", 얼굴 사진이 안 뜸 |
 >
 > **한 파일씩 따로 돌리세요.** SQL Editor 는 스크립트 전체를 한 트랜잭션으로 실행해서,
 > 뒤쪽 한 줄이 실패하면 앞의 `alter table` 까지 전부 되돌립니다. 붙여서 돌리면
@@ -97,8 +98,8 @@ npm test
 
 1. <https://supabase.com> → 프로젝트 생성 (Region: **Northeast Asia (Seoul)**)
 2. **SQL Editor** 에서 `supabase/migrations` 의 파일을 **하나씩, 번호 순서대로** 실행
-   (`0001` 스키마+RLS · `0002` 시연 데이터 · `0003` 긴급 배차 · `0004` 등록 권한 · `0005` 사진 저장소.
-   다시 돌려도 안전합니다.)
+   (`0001` 스키마+RLS · `0002` 시연 데이터 · `0003` 긴급 배차 · `0004` 등록 권한 ·
+   `0005` 사진 저장소 · `0006` 현장↔기사 공개 범위. 다시 돌려도 안전합니다.)
    마지막에 **회사 13 / 현장 3 / 공장 12 / 출하현황 12 / 차량 139** 가 나오면 성공
 3. **Authentication → Sign In / Providers → User Signups** 에서 **Confirm email 끄기**
    (가상 이메일로 계정을 만들 것이라 인증 메일을 받을 수 없습니다)
@@ -240,7 +241,7 @@ lib/
   ai/allocate.ts        배분 최적화
   ai/predict.ts         지연 예측 · 콜드조인트 경고
 components/             KakaoMap · SpecPicker · 역할 껍데기 등
-supabase/migrations/    0001_init · 0002_seed · 0003_urgent · 0004_registration · 0005_photo_storage
+supabase/migrations/    0001_init · 0002_seed · 0003_urgent · 0004_registration · 0005_photo_storage · 0006_driver_visible_to_site
 docs/prototype-a.html   기존 프로토타입 (참고용, 고치지 않음)
 tests/                  vitest
 ```
