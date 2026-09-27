@@ -61,6 +61,7 @@ export interface PlantStatusRow {
   available_trucks: number;
   available_volume: number;
   is_open: boolean;
+  updated_at: string | null;
 }
 
 export interface TruckRow {
@@ -191,6 +192,7 @@ export function toPlant(r: PlantRow, status?: PlantStatusRow): Plant {
     availableTrucks: status?.available_trucks ?? 0,
     availableVolume: Number(status?.available_volume ?? 0),
     isOpen: status?.is_open ?? false,
+    updatedAt: status?.updated_at ? ms(status.updated_at) : undefined,
     cap: r.capability,
   };
 }

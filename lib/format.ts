@@ -87,3 +87,17 @@ export function failure(e: unknown, fallback: string): string {
   }
   return msg ? `${fallback} (${msg})` : fallback;
 }
+
+/**
+ * "3분 전" — 마지막 갱신이 얼마나 지났는지.
+ * 현장이 공장의 출하 가능 물량을 믿어도 되는지 판단하는 데 쓴다.
+ */
+export function ago(at: number | undefined | null, now: number): string {
+  if (at == null) return '기록 없음';
+  const m = Math.round((now - at) / MIN);
+  if (m < 1) return '방금';
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
+}

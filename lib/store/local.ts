@@ -59,7 +59,12 @@ function load(): Db {
     const savedStatus = new Map(
       (parsed.plants ?? []).map((p) => [
         p.id,
-        { availableTrucks: p.availableTrucks, availableVolume: p.availableVolume, isOpen: p.isOpen },
+        {
+          availableTrucks: p.availableTrucks,
+          availableVolume: p.availableVolume,
+          isOpen: p.isOpen,
+          updatedAt: p.updatedAt,
+        },
       ]),
     );
     return {
@@ -140,7 +145,9 @@ export async function updatePlantStatus(
 ) {
   update((d) => ({
     ...d,
-    plants: d.plants.map((p) => (p.id === plantId ? { ...p, ...patch } : p)),
+    plants: d.plants.map((p) =>
+      p.id === plantId ? { ...p, ...patch, updatedAt: Date.now() } : p,
+    ),
   }));
 }
 
@@ -266,6 +273,7 @@ export async function dispatchTruck(input: DispatchInput): Promise<Delivery> {
           ...p,
           availableTrucks: Math.max(0, p.availableTrucks - 1),
           availableVolume: Math.max(0, p.availableVolume - input.volumeM3),
+          updatedAt: Date.now(),
         }
       : p,
   );

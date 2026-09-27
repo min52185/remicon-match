@@ -12,6 +12,7 @@
  */
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { PlantShell } from '@/components/RoleShells';
 import { Alert, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
 import {
@@ -22,7 +23,7 @@ import {
   targetInterval,
   upcomingShipments,
 } from '@/lib/dashboard';
-import { clock, duration, m3, remaining } from '@/lib/format';
+import { ago, clock, duration, failure, m3, remaining } from '@/lib/format';
 import {
   DeliveryRules,
   MIN,
@@ -116,7 +117,7 @@ function DashboardBody({ plant }: { plant: Plant }) {
       </Panel>
 
       {/* ② 출하 능력 */}
-      <Capacity plant={plant} />
+      <Capacity plant={plant} idle={idle.length} now={now} />
 
       {/* ③ 출하 간격 */}
       <Interval plant={plant} today={today} orders={orders} db={db} now={now} />
@@ -153,15 +154,82 @@ function DashboardBody({ plant }: { plant: Plant }) {
  * 출하 능력 — 현장의 주문 가능 목록을 결정하는 값
  * ======================================================================== */
 
-function Capacity({ plant }: { plant: Plant }) {
+function Capacity({ plant, idle, now }: { plant: Plant; idle: number; now: number }) {
   // 시간당 생산 가능 물량 = 한 현장에 보낼 수 있는 대수 × 1대 적재량
   const hourlyVolume = plant.hourlyRate * TRUCK_CAPACITY_M3;
+
+  /**
+   * 입력칸은 저장 전까지 화면에만 둔다.
+   *
+   * 전에는 한 글자 칠 때마다 DB 에 썼다. "240" 을 지우고 "180" 을 치면 2·4·0·1·8 이
+   * 전부 저장되고, 그 값이 그대로 현장 화면에 실시간으로 뜬다 — 0m³ 이 잠깐 보이면
+   * 현장은 그 공장을 후보에서 지운다. 다 적고 저장을 누를 때 한 번만 쓴다.
+   */
+  const [draft, setDraft] = useState<{ trucks: string; volume: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const trucks = draft ? draft.trucks : String(plant.availableTrucks);
+  const volume = draft ? draft.volume : String(plant.availableVolume);
+  const dirty = draft != null;
+
+  const edit = (patch: Partial<{ trucks: string; volume: string }>) =>
+    setDraft({ trucks, volume, ...patch });
+
+  const bump = (key: 'trucks' | 'volume', by: number) => {
+    const cur = Number(key === 'trucks' ? trucks : volume) || 0;
+    edit({ [key]: String(Math.max(0, Math.round((cur + by) * 10) / 10)) });
+  };
+
+  async function save() {
+    const t = Number(trucks);
+    const v = Number(volume);
+
+    const problem =
+      !Number.isInteger(t) || t < 0
+        ? '출하 가능 차량은 0 이상 정수로 입력하세요'
+        : t > plant.fleetSize
+          ? `출하 가능 차량이 보유 ${plant.fleetSize}대보다 많을 수 없습니다`
+          : !(v >= 0 && v <= 9999)
+            ? '출하 가능 물량은 0~9999m³ 로 입력하세요'
+            : null;
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await updatePlantStatus(plant.id, { availableTrucks: t, availableVolume: v });
+      setDraft(null);
+    } catch (e) {
+      setError(failure(e, '저장하지 못했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleOpen(stop: boolean) {
+    setError(null);
+    try {
+      await updatePlantStatus(plant.id, { isOpen: !stop });
+    } catch (e) {
+      setError(failure(e, '출하 상태를 바꾸지 못했습니다.'));
+    }
+  }
 
   return (
     <Panel
       title="출하 능력"
       aside={plant.isOpen ? <Tag tone="ok">출하 중</Tag> : <Tag tone="bad">출하 중지</Tag>}
     >
+      <p style={{ fontSize: '0.78rem', color: 'var(--color-concrete-mid)', margin: '0 0 12px' }}>
+        마지막 갱신 {ago(plant.updatedAt, now)}
+        {plant.updatedAt ? ` · ${clock(plant.updatedAt)}` : ''} — 이 값으로 현장의 주문 가능 공장
+        목록이 정해집니다.
+      </p>
+
       <StatGrid>
         <Stat
           label="출하 가능 물량"
@@ -187,52 +255,67 @@ function Capacity({ plant }: { plant: Plant }) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
           gap: 12,
           marginTop: 14,
         }}
       >
-        <label className="field">
-          <span className="label">출하 가능 차량 (대)</span>
-          <input
-            type="number"
-            className="input"
-            min={0}
-            max={plant.fleetSize}
-            value={plant.availableTrucks}
-            onChange={(e) =>
-              updatePlantStatus(plant.id, {
-                availableTrucks: Math.max(
-                  0,
-                  Math.min(plant.fleetSize, Number(e.target.value) || 0),
-                ),
-              })
-            }
-          />
-        </label>
-        <label className="field">
-          <span className="label">출하 가능 물량 (m³)</span>
-          <input
-            type="number"
-            className="input"
-            min={0}
-            step={6}
-            value={plant.availableVolume}
-            onChange={(e) =>
-              updatePlantStatus(plant.id, {
-                availableVolume: Math.max(0, Number(e.target.value) || 0),
-              })
-            }
-          />
-        </label>
+        <Stepper
+          label="출하 가능 차량"
+          unit="대"
+          value={trucks}
+          step={1}
+          max={plant.fleetSize}
+          onChange={(v) => edit({ trucks: v })}
+          onBump={(by) => bump('trucks', by)}
+        />
+        <Stepper
+          label="출하 가능 물량"
+          unit="m³"
+          value={volume}
+          step={TRUCK_CAPACITY_M3}
+          onChange={(v) => edit({ volume: v })}
+          onBump={(by) => bump('volume', by)}
+        />
       </div>
+
+      {/* 배차 기록이 아는 대기 대수와 공장이 적은 값이 어긋날 수 있다 */}
+      <p style={{ fontSize: '0.8rem', color: 'var(--color-concrete-wet)', margin: '0 0 10px' }}>
+        배차 기록상 지금 대기 중인 차량은 <strong>{idle}대</strong>입니다.
+        {Number(trucks) !== idle && (
+          <>
+            {' '}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ padding: '2px 6px', textDecoration: 'underline' }}
+              onClick={() => edit({ trucks: String(idle) })}
+            >
+              가능 차량에 반영
+            </button>
+          </>
+        )}
+      </p>
+
+      {error && (
+        <p style={{ fontSize: '0.82rem', color: 'var(--color-bad)', margin: '0 0 8px' }}>{error}</p>
+      )}
+
+      <button
+        type="button"
+        className="btn btn-primary btn-block"
+        disabled={!dirty || saving}
+        onClick={() => void save()}
+      >
+        {saving ? '저장 중…' : dirty ? '저장하고 현장에 공개' : '저장됨'}
+      </button>
 
       <label
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 10,
-          padding: '10px 0',
+          padding: '12px 0 4px',
           fontSize: '0.9rem',
           cursor: 'pointer',
         }}
@@ -240,10 +323,10 @@ function Capacity({ plant }: { plant: Plant }) {
         <input
           type="checkbox"
           checked={!plant.isOpen}
-          onChange={(e) => updatePlantStatus(plant.id, { isOpen: !e.target.checked })}
+          onChange={(e) => void toggleOpen(e.target.checked)}
           style={{ width: 18, height: 18 }}
         />
-        출하 중지 (점검·원자재 부족 등)
+        출하 중지 (점검·원자재 부족 등) — 누르는 즉시 반영됩니다
       </label>
 
       <p style={{ fontSize: '0.78rem', color: 'var(--color-concrete-mid)', margin: '6px 0 0' }}>
@@ -639,5 +722,74 @@ function UrgentInbox({ plant }: { plant: Plant }) {
         수락 · 거절 결정하기
       </Link>
     </Panel>
+  );
+}
+
+/* ==========================================================================
+ * 숫자 한 칸 + 증감 버튼
+ *
+ * 공장 사무실에서 장갑 낀 채로 누르는 화면이다. 키보드로 지우고 다시 치는 것보다
+ * ±버튼 한 번이 빠르고 틀리지 않는다. 직접 칠 수도 있게 입력칸은 그대로 둔다.
+ * ======================================================================== */
+
+function Stepper({
+  label,
+  unit,
+  value,
+  step,
+  max,
+  onChange,
+  onBump,
+}: {
+  label: string;
+  unit: string;
+  value: string;
+  step: number;
+  max?: number;
+  onChange: (v: string) => void;
+  onBump: (by: number) => void;
+}) {
+  const n = Number(value);
+  const atMax = max != null && Number.isFinite(n) && n >= max;
+
+  return (
+    <div className="field">
+      <span className="label">
+        {label} ({unit})
+      </span>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          type="button"
+          className="btn btn-outline"
+          style={{ flex: 'none', width: 44, padding: 0, fontSize: '1.1rem' }}
+          aria-label={`${label} 줄이기`}
+          onClick={() => onBump(-step)}
+        >
+          −
+        </button>
+        <input
+          type="number"
+          className="input"
+          inputMode="decimal"
+          min={0}
+          max={max}
+          step={step}
+          value={value}
+          aria-label={label}
+          style={{ textAlign: 'center', fontFamily: 'var(--font-mono)' }}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <button
+          type="button"
+          className="btn btn-outline"
+          style={{ flex: 'none', width: 44, padding: 0, fontSize: '1.1rem' }}
+          aria-label={`${label} 늘리기`}
+          disabled={atMax}
+          onClick={() => onBump(step)}
+        >
+          +
+        </button>
+      </div>
+    </div>
   );
 }

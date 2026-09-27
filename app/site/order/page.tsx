@@ -14,12 +14,13 @@ import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
-import { duration, failure, fromLocalInput, m3, toLocalInput } from '@/lib/format';
+import { ago, duration, failure, fromLocalInput, m3, toLocalInput } from '@/lib/format';
 import {
   DEFAULT_POUR_SETTINGS,
   DEFAULT_SPEC,
   MIN,
   PourRules,
+  RULES,
   TRUCK_CAPACITY_M3,
   specText,
 } from '@/lib/rules';
@@ -27,7 +28,7 @@ import { simClock } from '@/lib/services/clock';
 import { getRoutesToSite, type RouteResult } from '@/lib/services/route';
 import { getTemperature } from '@/lib/services/weather';
 import { bumpFavorite, createOrder, favoritesOfSite, saveFavorite } from '@/lib/store';
-import { useDb, useMounted } from '@/lib/store/hooks';
+import { useDb, useMounted, useNow } from '@/lib/store/hooks';
 import type { Judgement, Level, Order, Plant, Site, Spec } from '@/lib/types';
 
 export default function OrderPage() {
@@ -493,11 +494,38 @@ function PlantRow({
           {route?.source === 'approx' && ' · 근사'}
         </span>
       </div>
+      <StockAge updatedAt={plant.updatedAt} />
       {route?.delayReason && (
         <p style={{ fontSize: '0.75rem', color: 'var(--color-warn)', margin: '6px 0 0' }}>
           {route.delayReason}
         </p>
       )}
     </button>
+  );
+}
+
+/**
+ * 공장이 출하 현황을 언제 고쳤는지.
+ *
+ * "가용 8대 / 240m³" 가 오늘 아침 값인지 지난주 값인지 모르면 숫자를 믿을 수 없다.
+ * 오래됐으면 색을 바꿔 "전화로 확인하라"고 말해 준다 — 숨기는 것보다 낫다.
+ */
+function StockAge({ updatedAt }: { updatedAt?: number }) {
+  const now = useNow(30_000);
+  if (!now) return null;
+
+  const stale = updatedAt == null || now - updatedAt > RULES.STOCK_STALE_MIN * MIN;
+
+  return (
+    <p
+      style={{
+        fontSize: '0.74rem',
+        margin: '6px 0 0',
+        color: stale ? 'var(--color-warn)' : 'var(--color-concrete-mid)',
+      }}
+    >
+      출하 현황 {ago(updatedAt, now)}
+      {stale && ' — 오래됐습니다. 주문 전에 공장에 확인하세요.'}
+    </p>
   );
 }

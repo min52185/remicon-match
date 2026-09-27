@@ -61,6 +61,8 @@ export interface Plant extends LatLng {
   /** 이 현장 한 곳으로 시간당 내보낼 수 있는 최대 대수 (지시서 6장 제약 ③) */
   hourlyRate: number;
   isOpen: boolean;
+  /** 공장이 출하 현황을 마지막으로 고친 시각 — 오래됐으면 현장이 믿으면 안 된다 */
+  updatedAt?: number;
   cap: PlantCapability;
 }
 

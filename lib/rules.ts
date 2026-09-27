@@ -35,6 +35,8 @@ export const RULES = Object.freeze({
   CAUTION_MARGIN_MIN: 5,
   /** [가정] 타설 기한 이 분 전에 경고 */
   LIMIT_WARN_MIN: 10,
+  /** [가정] 공장 출하 현황이 이 분보다 오래되면 현장에 "확인하세요"라고 알린다 */
+  STOCK_STALE_MIN: 180,
   /** 타설 공백 경고 — 타설이 이 분보다 오래 멈추면 알린다 (팀이 정할 값) */
   COLD_JOINT_WARN_GAP_MIN: 20,
   /**
