@@ -242,6 +242,7 @@ lib/
   ai/predict.ts         지연 예측 · 콜드조인트 경고
 components/             KakaoMap · SpecPicker · 역할 껍데기 등
 supabase/migrations/    0001_init · 0002_seed · 0003_urgent · 0004_registration · 0005_photo_storage · 0006_driver_visible_to_site
+supabase/reset-rehearsal.sql  리허설 초기화 — 주문·배송만 비우고 공장·현장은 남긴다
 docs/prototype-a.html   기존 프로토타입 (참고용, 고치지 않음)
 tests/                  vitest
 ```
