@@ -8,13 +8,14 @@
  */
 
 import Link from 'next/link';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import KakaoMap, { type MapMarker, type MapPath } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { analyzeDelay, monitorPour, recommend } from '@/lib/ai/predict';
 import { clock, delayText, duration, limitRemaining, m3, remaining } from '@/lib/format';
 import { DeliveryRules, MIN, PHASE_LABEL, PHASE_TONE, specText } from '@/lib/rules';
+import { photoUrl } from '@/lib/services/photos';
 import { getPosition, type Position } from '@/lib/services/tracking';
 import { markCompleted, updateEta } from '@/lib/store';
 import { useDb, useMounted, useNow } from '@/lib/store/hooks';
@@ -259,6 +260,9 @@ function DeliveryCard({ d, pos, now }: { d: Delivery; pos: Position; now: number
         {order && ` · ${specText(order.spec)}`}
       </p>
 
+      {/* 누가 오는지 — 게이트에서 본인 확인에 쓴다 */}
+      {truck?.facePath && <DriverFace path={truck.facePath} name={truck.driver} />}
+
       {phase !== 'done' && (
         <div style={{ marginBottom: 8 }}>
           <ProgressBar done={pos.progress * 100} total={100} tone={delay.level} />
@@ -299,6 +303,8 @@ function DeliveryCard({ d, pos, now }: { d: Delivery; pos: Position; now: number
           타설 완료 확인
         </button>
       )}
+      {d.notePhotoPath && <NotePhoto path={d.notePhotoPath} />}
+
       {d.completedAt && (
         <p style={{ fontSize: '0.8rem', margin: '8px 0 0' }}>
           타설 완료 {clock(d.completedAt)} ·{' '}
@@ -344,6 +350,87 @@ function ProgressBar({
       aria-valuemax={100}
     >
       <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width .4s' }} />
+    </div>
+  );
+}
+
+/* ==========================================================================
+ * 사진 — 기사 얼굴과 납품서
+ *
+ * 비공개 저장소라 볼 때마다 짧게 사는 서명 주소를 새로 받는다. 경로가 바뀌면
+ * 다시 받는다. 못 받으면 아무것도 그리지 않는다 — 사진이 없다고 배송에
+ * 문제가 생기는 것은 아니다.
+ * ======================================================================== */
+
+function usePhotoUrl(kind: 'face' | 'note', path: string) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    photoUrl(kind, path).then((u) => alive && setUrl(u));
+    return () => {
+      alive = false;
+    };
+  }, [kind, path]);
+  return url;
+}
+
+function DriverFace({ path, name }: { path: string; name?: string }) {
+  const url = usePhotoUrl('face', path);
+  if (!url) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}>
+      {/* 기사가 올린 사진이라 크기를 알 수 없다 */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={`${name ?? '기사'} 얼굴 사진`}
+        style={{
+          width: 44,
+          height: 44,
+          objectFit: 'cover',
+          borderRadius: '50%',
+          border: '1px solid var(--color-line-strong)',
+        }}
+      />
+      <span style={{ fontSize: '0.8rem', color: 'var(--color-concrete-wet)' }}>
+        게이트에서 본인 확인에 쓰세요
+      </span>
+    </div>
+  );
+}
+
+function NotePhoto({ path }: { path: string }) {
+  const url = usePhotoUrl('note', path);
+  const [open, setOpen] = useState(false);
+  if (!url) return null;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        type="button"
+        className="btn btn-outline btn-sm"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {open ? '납품서 사진 접기' : '납품서 사진 보기'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt="기사가 올린 종이 납품서"
+            style={{
+              width: '100%',
+              border: '1px solid var(--color-line-strong)',
+              borderRadius: 'var(--radius-sharp)',
+            }}
+          />
+          <p style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)', margin: '6px 0 0' }}>
+            기사가 현장에서 찍어 올린 종이 납품서입니다.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

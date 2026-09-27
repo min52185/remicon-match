@@ -128,6 +128,7 @@ export interface PlanItemRow {
 
 export interface DeliveryRow {
   id: string;
+  note_photo_path: string | null;
   order_id: string;
   truck_id: string;
   volume_m3: number;
@@ -161,6 +162,8 @@ export interface ProfileRow {
   role: 'site' | 'plant' | 'driver' | 'admin';
   company_id: string | null;
   phone: string | null;
+  /** 기사 얼굴 사진의 Storage 경로 */
+  photo_path: string | null;
 }
 
 /* ==========================================================================
@@ -198,7 +201,7 @@ export function toPlant(r: PlantRow, status?: PlantStatusRow): Plant {
 }
 
 /** 기사 이름은 profiles 에 있다. 아직 배정 전이면 '미배정'. */
-export function toTruck(r: TruckRow, driverName?: string): Truck {
+export function toTruck(r: TruckRow, driverName?: string, facePath?: string): Truck {
   return {
     id: r.id,
     plantId: r.plant_id,
@@ -206,6 +209,7 @@ export function toTruck(r: TruckRow, driverName?: string): Truck {
     plateNo: r.plate_no,
     driver: driverName ?? (r.driver_id ? '배정됨' : '미배정'),
     driverId: r.driver_id ?? undefined,
+    facePath,
     capacityM3: Number(r.capacity_m3),
   };
 }
@@ -289,6 +293,7 @@ export function toDelivery(r: DeliveryRow, order?: Order): Delivery {
     path: Array.isArray(r.path) ? r.path : [],
     delayReason: r.delay_reason ?? undefined,
     simSeed: r.sim_seed ?? undefined,
+    notePhotoPath: r.note_photo_path ?? undefined,
   };
 }
 

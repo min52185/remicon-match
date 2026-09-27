@@ -309,6 +309,14 @@ export async function dispatchTruck(input: DispatchInput): Promise<Delivery> {
   return delivery;
 }
 
+/** 기사가 올린 납품서 사진 경로를 배송에 붙인다 */
+export async function saveNotePhoto(deliveryId: string, notePhotoPath: string | undefined) {
+  update((d) => ({
+    ...d,
+    deliveries: d.deliveries.map((x) => (x.id === deliveryId ? { ...x, notePhotoPath } : x)),
+  }));
+}
+
 /** 1분마다 다시 계산한 ETA 를 반영한다 */
 export async function updateEta(deliveryId: string, etaCurrentAt: number, delayReason?: string) {
   update((d) => ({

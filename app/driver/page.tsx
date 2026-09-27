@@ -13,13 +13,31 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import KakaoMap, { type MapMarker, type MapPath } from '@/components/KakaoMap';
+import PhotoInput from '@/components/PhotoInput';
 import { DriverShell } from '@/components/RoleShells';
 import { Alert, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
 import { siteQueue } from '@/lib/dashboard';
 import { clock, duration, failure, limitRemaining, m3, remaining } from '@/lib/format';
-import { DeliveryRules, MIN, PHASE_LABEL, PHASE_TONE, UNLOAD_EST_MIN, specText } from '@/lib/rules';
+import {
+  DeliveryRules,
+  MIN,
+  PHASE_LABEL,
+  PHASE_TONE,
+  TRUCK_CAPACITY_M3,
+  UNLOAD_EST_MIN,
+  specText,
+} from '@/lib/rules';
 import { getPosition } from '@/lib/services/tracking';
-import { claimTruck, markArrived, markCompleted, pushLocation, releaseTruck } from '@/lib/store';
+import { facePath, notePath } from '@/lib/services/photos';
+import {
+  claimTruck,
+  createTruck,
+  markArrived,
+  markCompleted,
+  pushLocation,
+  releaseTruck,
+  saveNotePhoto,
+} from '@/lib/store';
 import { useDb, useMounted, useNow } from '@/lib/store/hooks';
 import { useAuth } from '@/lib/auth';
 import type { Delivery, Truck } from '@/lib/types';
@@ -83,6 +101,8 @@ function DriverBody() {
           </button>
         </Panel>
       )}
+
+      <MyProfile />
 
       {!demoMode && <MyTruck truck={myTruck} />}
 
@@ -309,12 +329,16 @@ function MyTruck({ truck }: { truck?: Truck }) {
           </button>
         </>
       )}
+
+      {/* 목록에 없는 차 — 새로 들어온 차나 임차 차량은 기사가 직접 넣는다 */}
+      <NewTruckForm plantIds={[...myPlantIds]} />
     </Panel>
   );
 }
 
 function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
   const db = useDb();
+  const { profile } = useAuth();
   const truck = db.trucks.find((t) => t.id === delivery.truckId);
   const plant = db.plants.find((p) => p.id === delivery.plantId);
   const site = db.sites.find((s) => s.id === delivery.siteId);
@@ -560,12 +584,27 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
         </div>
       )}
 
-      {/* 현장 도착 후 */}
+      {/* 현장 도착 후 — 종이 납품서를 찍어 두고 완료한다 */}
+      {(phase === 'onsite' || delivery.notePhotoPath) && (
+        <div style={{ marginTop: 14 }}>
+          <PhotoInput
+            kind="note"
+            path={notePath(delivery.id, profile?.id ?? 'demo')}
+            savedPath={delivery.notePhotoPath}
+            label="납품서(송장) 사진"
+            height={200}
+            hint="현장 서명이 들어간 종이 납품서를 찍어 두세요. 글씨가 읽혀야 증빙이 됩니다."
+            onSaved={(p) => saveNotePhoto(delivery.id, p)}
+            onRemoved={() => saveNotePhoto(delivery.id, undefined)}
+          />
+        </div>
+      )}
+
       {phase === 'onsite' && (
         <button
           type="button"
           className="btn btn-primary btn-block"
-          style={{ marginTop: 14 }}
+          style={{ marginTop: 4 }}
           onClick={() => {
             markCompleted(delivery.id, now);
             stop();
@@ -579,6 +618,296 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
         화면이 꺼지면 브라우저가 위치 전송을 멈춥니다. 운행 중에는 화면을 켜 두세요.
       </p>
     </Panel>
+  );
+}
+
+/* ==========================================================================
+ * 내 정보 — 기사 등록
+ *
+ * 현장에 처음 가는 기사는 게이트에서 신원을 확인받는다. 얼굴 사진이 있으면
+ * 현장이 누가 오는지 미리 안다.
+ *
+ * ⚠ 얼굴 사진은 개인정보다 (지시서 11장). 동의 없이 올리게 하지 않고, 왜 쓰는지
+ *   적고, 언제든 지울 수 있게 둔다. 저장소는 비공개이고 볼 때마다 몇 분짜리
+ *   서명 주소를 새로 발급한다 — 주소가 새어도 나중에는 열리지 않는다.
+ * ======================================================================== */
+
+function MyProfile() {
+  const { demoMode, profile, updateProfile } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState(profile?.phone ?? '');
+  const [consent, setConsent] = useState(!!profile?.photoPath);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!profile) return null;
+
+  async function savePhone() {
+    setBusy(true);
+    setError(null);
+    try {
+      await updateProfile({ phone: phone.trim() });
+    } catch (e) {
+      setError(failure(e, '연락처를 저장하지 못했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel
+      title="내 정보"
+      aside={
+        profile.photoPath ? <Tag tone="ok">사진 등록됨</Tag> : <Tag tone="muted">사진 없음</Tag>
+      }
+    >
+      <Row label="이름">{profile.name}</Row>
+      <Row label="연락처">{profile.phone || '없음'}</Row>
+
+      {!open ? (
+        <button
+          type="button"
+          className="btn btn-outline btn-sm btn-block"
+          style={{ marginTop: 12 }}
+          onClick={() => setOpen(true)}
+        >
+          내 정보 고치기
+        </button>
+      ) : (
+        <div style={{ marginTop: 14 }}>
+          <label className="field">
+            <span className="label">연락처</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="input"
+                type="tel"
+                value={phone}
+                maxLength={20}
+                placeholder="예) 010-0000-0000"
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ flex: 'none' }}
+                disabled={busy}
+                onClick={() => void savePhone()}
+              >
+                저장
+              </button>
+            </div>
+            <span style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)' }}>
+              현장이 급할 때 이 번호로 전화합니다.
+            </span>
+          </label>
+
+          <label
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'flex-start',
+              fontSize: '0.84rem',
+              lineHeight: 1.55,
+              cursor: 'pointer',
+              margin: '4px 0 12px',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              style={{ width: 18, height: 18, marginTop: 2, flex: 'none' }}
+            />
+            <span>
+              현장 게이트에서 <strong>본인 확인</strong>에 쓰도록 얼굴 사진을 올리는 것에
+              동의합니다. 사진은 내가 배송하는 현장과 소속 레미콘사만 볼 수 있고, 언제든 지울 수
+              있습니다.
+            </span>
+          </label>
+
+          <PhotoInput
+            kind="face"
+            path={facePath(profile.id)}
+            savedPath={profile.photoPath}
+            label="얼굴 사진"
+            disabled={!consent}
+            hint={
+              consent
+                ? '얼굴이 잘 보이게, 밝은 곳에서 찍어 주세요. 안 올려도 배송에는 지장이 없습니다.'
+                : '동의해야 올릴 수 있습니다.'
+            }
+            onSaved={(p) => updateProfile({ photoPath: p })}
+            onRemoved={() => updateProfile({ photoPath: null })}
+          />
+
+          {error && (
+            <p style={{ fontSize: '0.82rem', color: 'var(--color-bad)', margin: '0 0 8px' }}>
+              {error}
+            </p>
+          )}
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-block"
+            onClick={() => setOpen(false)}
+          >
+            닫기
+          </button>
+
+          {demoMode && (
+            <p
+              style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)', margin: '8px 0 0' }}
+            >
+              시연 모드라 사진은 이 브라우저에만 저장됩니다.
+            </p>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* ==========================================================================
+ * 차량 등록 — 차량번호를 직접 넣는다
+ *
+ * 보통은 레미콘사가 차량을 등록해 두지만, 새로 들어온 차나 임차 차량은
+ * 기사가 먼저 도착하는 일이 있다. 그때 여기서 넣고 바로 자기 앞으로 가져간다.
+ * ======================================================================== */
+
+function NewTruckForm({ plantIds }: { plantIds: string[] }) {
+  const db = useDb();
+  const [open, setOpen] = useState(false);
+  const [plantId, setPlantId] = useState(plantIds[0] ?? '');
+  const [plateNo, setPlateNo] = useState('');
+  const [capacity, setCapacity] = useState(String(TRUCK_CAPACITY_M3));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const plants = db.plants.filter((p) => plantIds.includes(p.id));
+  const cap = Number(capacity);
+
+  /** [가정] 국내 차량번호 — "경기 80바 1234" 또는 "80바 1234" */
+  const plateOk = /^(\S+\s)?\d{2,3}[가-힣]\s?\d{4}$/.test(plateNo.trim());
+
+  const problem = !plantId
+    ? '소속 공장을 고르세요'
+    : !plateOk
+      ? '차량번호를 "경기 80바 1234" 형식으로 적어 주세요'
+      : !(cap > 0 && cap <= 12)
+        ? '적재량을 0 초과 12m³ 이하로 적어 주세요'
+        : null;
+
+  async function save() {
+    if (problem) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await createTruck({ plantId, plateNo: plateNo.trim(), capacityM3: cap, claim: true });
+      setOpen(false);
+      setPlateNo('');
+    } catch (e) {
+      setError(failure(e, '차량을 등록하지 못했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (plants.length === 0) return null;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="btn btn-outline btn-block btn-sm"
+        style={{ marginTop: 12 }}
+        onClick={() => setOpen(true)}
+      >
+        내 차량 직접 등록하기
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: 12,
+        background: 'var(--color-paper)',
+        border: '1px solid var(--color-line-strong)',
+        borderRadius: 'var(--radius-sharp)',
+      }}
+    >
+      <label className="field">
+        <span className="label">소속 공장</span>
+        <select className="select" value={plantId} onChange={(e) => setPlantId(e.target.value)}>
+          {plants.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field">
+        <span className="label">차량번호</span>
+        <input
+          className="input"
+          value={plateNo}
+          maxLength={20}
+          placeholder="예) 경기 80바 1234"
+          style={{ fontFamily: 'var(--font-mono)' }}
+          onChange={(e) => setPlateNo(e.target.value)}
+        />
+      </label>
+
+      <label className="field">
+        <span className="label">적재량 (m³)</span>
+        <input
+          className="input"
+          type="number"
+          inputMode="decimal"
+          min={1}
+          max={12}
+          step={0.5}
+          value={capacity}
+          onChange={(e) => setCapacity(e.target.value)}
+        />
+      </label>
+
+      {error && (
+        <p style={{ fontSize: '0.82rem', color: 'var(--color-bad)', margin: '0 0 8px' }}>{error}</p>
+      )}
+      {problem && !error && (
+        <p style={{ fontSize: '0.82rem', color: 'var(--color-concrete-mid)', margin: '0 0 8px' }}>
+          {problem}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          className="btn btn-outline"
+          style={{ flex: 'none' }}
+          onClick={() => setOpen(false)}
+          disabled={busy}
+        >
+          취소
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ flex: 1 }}
+          disabled={!!problem || busy}
+          onClick={() => void save()}
+        >
+          {busy ? '등록 중…' : '등록하고 내 차로'}
+        </button>
+      </div>
+
+      <p style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)', margin: '10px 0 0' }}>
+        호차 번호는 그 공장에서 비어 있는 가장 작은 번호로 자동 부여됩니다.
+      </p>
+    </div>
   );
 }
 

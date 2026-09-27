@@ -75,6 +75,8 @@ export interface Truck {
   driver: string;
   /** 이 차를 맡은 기사 계정 — 비어 있으면 아직 배정 전 */
   driverId?: string;
+  /** 기사 얼굴 사진 경로 — 현장이 게이트에서 본인 확인에 쓴다 */
+  facePath?: string;
   capacityM3: number;
 }
 
@@ -191,6 +193,11 @@ export interface Delivery {
   delayReason?: string;
   /** 시연용 가짜 차량이면 결정적 난수 씨앗 */
   simSeed?: string;
+  /**
+   * 기사가 찍어 올린 종이 납품서(송장) 사진의 저장 경로.
+   * 현장 서명이 들어간 종이가 증빙이라, 사진이 전자 납품서를 뒷받침한다.
+   */
+  notePhotoPath?: string;
 }
 
 /** truck_locations — GPS 기록 */

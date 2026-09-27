@@ -139,7 +139,7 @@ export async function refresh(): Promise<void> {
   if (!sb) return;
 
   try {
-    const [sitesR, plantsR, statusR, trucksR, favR, ordersR, plansR, itemsR, delivR] =
+    const [sitesR, plantsR, statusR, trucksR, favR, ordersR, plansR, itemsR, delivR, peopleR] =
       await Promise.all([
         sb.from('sites').select('*').order('name'),
         sb.from('plants').select('*').order('name'),
@@ -150,6 +150,9 @@ export async function refresh(): Promise<void> {
         sb.from('allocation_plans').select('*'),
         sb.from('plan_items').select('*'),
         sb.from('deliveries').select('*').order('mix_start_at'),
+        // 기사 이름·사진. 0004 이전에는 내 것만 읽혀서 '배정됨' 으로만 보였다.
+        // RLS 가 같은 회사까지만 열어 주므로, 남의 회사 기사는 여기 안 담긴다.
+        sb.from('profiles').select('id, name, photo_path'),
       ]);
 
     const statusByPlant = new Map(
@@ -193,10 +196,27 @@ export async function refresh(): Promise<void> {
       truckLocations = ((locR.data ?? []) as TruckLocationRow[]).map(toLocation).reverse();
     }
 
+    const people = new Map(
+      ((peopleR.data ?? []) as { id: string; name: string; photo_path: string | null }[]).map(
+        (r) => [r.id, r.name],
+      ),
+    );
+    const facePaths = new Map(
+      ((peopleR.data ?? []) as { id: string; photo_path: string | null }[])
+        .filter((r) => r.photo_path)
+        .map((r) => [r.id, r.photo_path as string]),
+    );
+
     db = {
       sites: ((sitesR.data ?? []) as SiteRow[]).map(toSite),
       plants,
-      trucks: ((trucksR.data ?? []) as TruckRow[]).map((r) => toTruck(r)),
+      trucks: ((trucksR.data ?? []) as TruckRow[]).map((r) =>
+        toTruck(
+          r,
+          r.driver_id ? people.get(r.driver_id) : undefined,
+          r.driver_id ? facePaths.get(r.driver_id) : undefined,
+        ),
+      ),
       favoriteMixes: ((favR.data ?? []) as FavoriteMixRow[]).map(toFavorite),
       orders,
       plans,
@@ -651,4 +671,15 @@ export async function createTruck(input: NewTruck): Promise<string> {
 
   await refresh();
   return data.id;
+}
+
+/** 기사가 올린 납품서 사진 경로를 배송에 붙인다 */
+export async function saveNotePhoto(deliveryId: string, notePhotoPath: string | undefined) {
+  const sb = client();
+  const { error } = await sb
+    .from('deliveries')
+    .update({ note_photo_path: notePhotoPath ?? null })
+    .eq('id', deliveryId);
+  if (error) throw error;
+  await refresh();
 }

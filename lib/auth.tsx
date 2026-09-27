@@ -23,6 +23,9 @@ export interface Profile {
   name: string;
   role: Role;
   companyId: string | null;
+  phone: string | null;
+  /** 기사 얼굴 사진의 저장 경로. 사진 자체는 Storage 에 있다. */
+  photoPath: string | null;
 }
 
 export interface Company {
@@ -45,6 +48,8 @@ interface AuthState {
   signOut(): Promise<void>;
   /** 가입 직후 소속 고르기 */
   setCompany(companyId: string): Promise<void>;
+  /** 내 프로필 고치기 — 기사 연락처·얼굴 사진 */
+  updateProfile(patch: Partial<Pick<Profile, 'name' | 'phone' | 'photoPath'>>): Promise<void>;
   listCompanies(): Promise<Company[]>;
 }
 
@@ -56,6 +61,8 @@ const DEMO_PROFILE: Profile = {
   name: '시연 사용자',
   role: 'site',
   companyId: 'demo',
+  phone: null,
+  photoPath: null,
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -71,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!sb) return null;
     const { data, error: e } = await sb
       .from('profiles')
-      .select('id, name, role, company_id')
+      .select('id, name, role, company_id, phone, photo_path')
       .eq('id', uid)
       .maybeSingle<ProfileRow>();
     if (e) {
@@ -79,7 +86,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
     if (!data) return null;
-    return { id: data.id, name: data.name, role: data.role as Role, companyId: data.company_id };
+    return {
+      id: data.id,
+      name: data.name,
+      role: data.role as Role,
+      companyId: data.company_id,
+      phone: data.phone ?? null,
+      photoPath: data.photo_path ?? null,
+    };
   }, []);
 
   const apply = useCallback(
@@ -163,6 +177,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, loadProfile],
   );
 
+  /**
+   * 내 프로필 고치기.
+   * 시연 모드에는 DB 가 없으므로 화면 상태만 바꾼다 — 사진은 브라우저에 남아 있다.
+   */
+  const updateProfile = useCallback(
+    async (patch: Partial<Pick<Profile, 'name' | 'phone' | 'photoPath'>>) => {
+      if (demoMode) {
+        setProfile((p) => (p ? { ...p, ...patch } : p));
+        return;
+      }
+      const sb = getSupabase();
+      if (!sb || !user) return;
+
+      const row: Record<string, unknown> = {};
+      if (patch.name !== undefined) row.name = patch.name;
+      if (patch.phone !== undefined) row.phone = patch.phone || null;
+      if (patch.photoPath !== undefined) row.photo_path = patch.photoPath;
+
+      const { error: e } = await sb.from('profiles').update(row).eq('id', user.id);
+      if (e) {
+        setError(translate(e.message));
+        throw e;
+      }
+      setProfile(await loadProfile(user.id));
+    },
+    [demoMode, user, loadProfile],
+  );
+
   const listCompanies = useCallback(async (): Promise<Company[]> => {
     const sb = getSupabase();
     if (!sb) return [];
@@ -182,9 +224,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signOut,
       setCompany,
+      updateProfile,
       listCompanies,
     }),
-    [demoMode, loading, user, profile, error, signIn, signUp, signOut, setCompany, listCompanies],
+    [
+      demoMode,
+      loading,
+      user,
+      profile,
+      error,
+      signIn,
+      signUp,
+      signOut,
+      setCompany,
+      updateProfile,
+      listCompanies,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
