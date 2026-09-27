@@ -40,8 +40,9 @@ begin
       ('delivery-notes', 'delivery-notes', false, 2097152, array['image/jpeg'])
     on conflict (id) do nothing;
     bucket_ok := true;
-  exception when insufficient_privilege or undefined_table then
+  exception when others then
     bucket_ok := false;
+    raise notice '  버킷 만들기 오류: % (%)', sqlerrm, sqlstate;
   end;
 
   -- -------------------------------------------------------------------------
@@ -89,10 +90,12 @@ begin
             select p.id::text from profiles p where p.company_id = my_company_id()
           )
           or (storage.foldername(name))[1] in (
+            -- deliveries 에는 site_id 가 없다. 현장은 주문을 거쳐 찾는다.
             select t.driver_id::text
             from deliveries d
             join trucks t on t.id = d.truck_id
-            join sites s on s.id = d.site_id
+            join orders o on o.id = d.order_id
+            join sites  s on s.id = o.site_id
             where s.company_id = my_company_id() and t.driver_id is not null
           )
         )
@@ -100,8 +103,9 @@ begin
     $p$;
 
     policy_ok := true;
-  exception when insufficient_privilege or undefined_table then
+  exception when others then
     policy_ok := false;
+    raise notice '  정책 만들기 오류: % (%)', sqlerrm, sqlstate;
   end;
 
   -- -------------------------------------------------------------------------
