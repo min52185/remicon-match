@@ -14,7 +14,7 @@
  * 제한시간을 넘겨서 보내면 그게 더 큰 사고다.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, Empty, Panel, Row, Tag } from './ui';
 import { duration, failure, m3 } from '@/lib/format';
 import {
@@ -46,6 +46,9 @@ export default function UrgentRequest({ site, basis, defaultTrucks, defaultReaso
   const [routes, setRoutes] = useState<Map<string, RouteResult>>(new Map());
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState<string | null>(null);
+  // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
+  const busyRef = useRef(false);
+
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
 
@@ -88,6 +91,8 @@ export default function UrgentRequest({ site, basis, defaultTrucks, defaultReaso
   }, [db.plants, routes, volumeM3, basis.spec, allowedMin]);
 
   async function send(plantId: string, plantName: string) {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setSending(plantId);
     setError(null);
     try {
@@ -108,6 +113,7 @@ export default function UrgentRequest({ site, basis, defaultTrucks, defaultReaso
     } catch (e) {
       setError(failure(e, '긴급 요청을 보내지 못했습니다.'));
     } finally {
+      busyRef.current = false;
       setSending(null);
     }
   }

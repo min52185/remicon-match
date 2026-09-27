@@ -9,7 +9,7 @@
  */
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
@@ -70,6 +70,14 @@ function OrderBody({ site }: { site: Site }) {
   const [placed, setPlaced] = useState<Order | null>(null);
   const [favAlias, setFavAlias] = useState('');
   const [sending, setSending] = useState(false);
+  /**
+   * 같은 프레임에 들어온 두 번째 클릭을 막는다.
+   *
+   * setBusy(true) 가 버튼에 반영되는 것은 다음 렌더다. 그 사이에 한 번 더
+   * 누르면 아직 잠기지 않은 버튼을 누르게 되고, 같은 주문이 두 건 들어간다.
+   * ref 는 같은 틱에서 바로 보이므로 그 틈을 막는다.
+   */
+  const busyRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
   // 마운트 뒤에 시각을 정한다 (서버·클라이언트 시각이 달라 생기는 경고 방지)
@@ -149,7 +157,8 @@ function OrderBody({ site }: { site: Site }) {
   const paths = selected?.route ? [{ id: 'sel', points: selected.route.path, emphasis: true }] : [];
 
   async function order() {
-    if (!selected || tempC == null) return;
+    if (busyRef.current || !selected || tempC == null) return;
+    busyRef.current = true;
     setSending(true);
     setSendError(null);
     try {
@@ -167,6 +176,7 @@ function OrderBody({ site }: { site: Site }) {
     } catch (e) {
       setSendError(failure(e, '주문을 보내지 못했습니다.'));
     } finally {
+      busyRef.current = false;
       setSending(false);
     }
   }

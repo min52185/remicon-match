@@ -11,7 +11,7 @@
  */
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
@@ -86,6 +86,9 @@ function AllocateBody({ site }: { site: Site }) {
   /** 지시서 6장 A~G 예시로 계산할지 — 발표용 */
   const [useExample, setUseExample] = useState(false);
   const [sending, setSending] = useState(false);
+  // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
+  const busyRef = useRef(false);
+
 
   useEffect(() => {
     if (!pourStartAt) setPourStartAt(defaultPourStart());
@@ -159,7 +162,8 @@ function AllocateBody({ site }: { site: Site }) {
   }
 
   async function sendOrders() {
-    if (!result?.feasible) return;
+    if (busyRef.current || !result?.feasible) return;
+    busyRef.current = true;
     setSending(true);
     setError(null);
     const plan: AllocationPlan = {
@@ -192,6 +196,7 @@ function AllocateBody({ site }: { site: Site }) {
     } catch (e) {
       setError(failure(e, '주문을 보내지 못했습니다.'));
     } finally {
+      busyRef.current = false;
       setSending(false);
     }
   }

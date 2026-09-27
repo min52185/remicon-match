@@ -9,7 +9,7 @@
  * AI 배분으로 들어온 주문이면 회차별 출하 시각표를 같이 보여 준다.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { PlantShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { clock, duration, failure, m3, remaining } from '@/lib/format';
@@ -78,6 +78,9 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [truckId, setTruckId] = useState('');
   const [sending, setSending] = useState(false);
+  // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
+  const busyRef = useRef(false);
+
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,7 +113,8 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
     .find((_, i) => i === deliveries.length);
 
   async function send() {
-    if (!route || !truckId || left <= 0) return;
+    if (busyRef.current || !route || !truckId || left <= 0) return;
+    busyRef.current = true;
     setSending(true);
     setError(null);
     try {
@@ -127,6 +131,7 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
     } catch (e) {
       setError(failure(e, '출하 지시에 실패했습니다.'));
     } finally {
+      busyRef.current = false;
       setSending(false);
     }
   }

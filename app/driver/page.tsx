@@ -781,6 +781,8 @@ function NewTruckForm({ plantIds }: { plantIds: string[] }) {
   const [plateNo, setPlateNo] = useState('');
   const [capacity, setCapacity] = useState(String(TRUCK_CAPACITY_M3));
   const [busy, setBusy] = useState(false);
+  // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
+  const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const plants = db.plants.filter((p) => plantIds.includes(p.id));
@@ -798,7 +800,8 @@ function NewTruckForm({ plantIds }: { plantIds: string[] }) {
         : null;
 
   async function save() {
-    if (problem) return;
+    if (busyRef.current || problem) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -808,6 +811,7 @@ function NewTruckForm({ plantIds }: { plantIds: string[] }) {
     } catch (e) {
       setError(failure(e, '차량을 등록하지 못했습니다.'));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }

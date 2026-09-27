@@ -11,7 +11,7 @@
  * 눈으로 확인하게 한다.
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import LocationPicker, { type PickedLocation } from '@/components/LocationPicker';
 import { SiteShell } from '@/components/RoleShells';
 import { Alert, Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
@@ -113,6 +113,9 @@ function NewSiteForm({ onDone, first }: { onDone: () => void; first?: boolean })
   const [where, setWhere] = useState<PickedLocation | null>(null);
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
+  // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
+  const busyRef = useRef(false);
+
   const [error, setError] = useState<string | null>(null);
 
   // 검색으로 고르면 주소가 따라오고, 지도에서 찍었으면 직접 적는다
@@ -128,7 +131,8 @@ function NewSiteForm({ onDone, first }: { onDone: () => void; first?: boolean })
           : null;
 
   async function save() {
-    if (problem || !where) return;
+    if (busyRef.current || problem || !where) return;
+    busyRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -143,6 +147,7 @@ function NewSiteForm({ onDone, first }: { onDone: () => void; first?: boolean })
     } catch (e) {
       setError(failure(e, '현장을 등록하지 못했습니다.'));
     } finally {
+      busyRef.current = false;
       setSaving(false);
     }
   }

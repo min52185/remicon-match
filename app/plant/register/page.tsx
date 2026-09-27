@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import CapabilityForm, { EMPTY_CAPABILITY, validateCapability } from '@/components/CapabilityForm';
 import LocationPicker, { type PickedLocation } from '@/components/LocationPicker';
 import { PlantShell } from '@/components/RoleShells';
@@ -154,6 +154,9 @@ function PlantForm({
   const [cap, setCap] = useState<PlantCapability>(plant?.cap ?? EMPTY_CAPABILITY);
 
   const [saving, setSaving] = useState(false);
+  // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
+  const busyRef = useRef(false);
+
   const [error, setError] = useState<string | null>(null);
 
   const effectiveAddress = address || where?.address || '';
@@ -174,7 +177,8 @@ function PlantForm({
               : validateCapability(cap);
 
   async function save() {
-    if (problem || !where) return;
+    if (busyRef.current || problem || !where) return;
+    busyRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -194,6 +198,7 @@ function PlantForm({
     } catch (e) {
       setError(failure(e, editing ? '고치지 못했습니다.' : '공장을 등록하지 못했습니다.'));
     } finally {
+      busyRef.current = false;
       setSaving(false);
     }
   }
