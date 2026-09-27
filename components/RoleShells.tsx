@@ -38,6 +38,13 @@ interface ShellProps<T> {
   description?: string;
   showClock?: boolean;
   children: (selected: T) => ReactNode;
+  /**
+   * 고를 것이 하나도 없을 때 대신 그릴 것.
+   *
+   * 등록 화면은 이게 없으면 열리지 않는다 — 현장이 없어서 현장을 등록하러 왔는데
+   * "고를 현장이 없습니다" 가 뜨고 끝난다. 첫 하나를 만들 길은 열어 둬야 한다.
+   */
+  empty?: () => ReactNode;
 }
 
 /* ==========================================================================
@@ -104,7 +111,7 @@ function AccountChip() {
  * 현장
  * ======================================================================== */
 
-export function SiteShell({ title, description, showClock, children }: ShellProps<Site>) {
+export function SiteShell({ title, description, showClock, children, empty }: ShellProps<Site>) {
   const db = useDb();
   const { demoMode, profile, pending, wrongRole } = useGate('site');
 
@@ -160,6 +167,8 @@ export function SiteShell({ title, description, showClock, children }: ShellProp
     >
       {site ? (
         children(site)
+      ) : empty ? (
+        empty()
       ) : (
         <NoneYet
           what="현장"
@@ -179,7 +188,13 @@ export function SiteShell({ title, description, showClock, children }: ShellProp
  * 레미콘사
  * ======================================================================== */
 
-export function PlantShell({ title, description, showClock, children }: ShellProps<Plant>) {
+export function PlantShell({
+  title,
+  description,
+  showClock,
+  children,
+  empty,
+}: ShellProps<Plant>) {
   const db = useDb();
   const { demoMode, profile, pending, wrongRole } = useGate('plant');
 
@@ -201,6 +216,7 @@ export function PlantShell({ title, description, showClock, children }: ShellPro
     { href: '/plant', label: '출하 현황', icon: <IconFactory /> },
     { href: '/plant/orders', label: '주문 관리', icon: <IconInbox />, badge: newOrders },
     { href: '/plant/dispatch', label: '배차', icon: <IconSend />, badge: toDispatch },
+    { href: '/plant/register', label: '공장 등록', icon: <IconPin /> },
   ];
 
   if (pending) return <Loading />;
@@ -233,6 +249,8 @@ export function PlantShell({ title, description, showClock, children }: ShellPro
     >
       {plant ? (
         children(plant)
+      ) : empty ? (
+        empty()
       ) : (
         <NoneYet
           what="공장"
@@ -240,6 +258,8 @@ export function PlantShell({ title, description, showClock, children }: ShellPro
           total={db.plants.length}
           myCompany={profile?.companyId}
           theirCompanies={db.plants.map((x) => x.companyId)}
+          addHref="/plant/register"
+          addLabel="공장 등록하러 가기"
         />
       )}
     </AppShell>

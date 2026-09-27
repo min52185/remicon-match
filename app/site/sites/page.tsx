@@ -27,6 +27,8 @@ export default function SitesPage() {
       title="내 현장"
       description="타설할 현장을 등록합니다. 위치로 이동시간과 배분을 계산합니다."
       showClock={false}
+      // 현장이 하나도 없으면 여기서 첫 현장을 만든다
+      empty={() => <NewSiteForm onDone={() => window.location.reload()} first />}
     >
       {(site) => <SitesBody current={site} />}
     </SiteShell>
@@ -104,7 +106,7 @@ function SitesBody({ current }: { current: Site }) {
  * 현장 등록
  * ======================================================================== */
 
-function NewSiteForm({ onDone }: { onDone: () => void }) {
+function NewSiteForm({ onDone, first }: { onDone: () => void; first?: boolean }) {
   const { demoMode, profile } = useAuth();
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
@@ -146,7 +148,15 @@ function NewSiteForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <Panel title="현장 추가" style={{ borderWidth: 2, borderColor: 'var(--color-rust)' }}>
+    <Panel
+      title={first ? '첫 현장 등록' : '현장 추가'}
+      style={{ borderWidth: 2, borderColor: 'var(--color-rust)' }}
+    >
+      {first && (
+        <p style={{ fontSize: '0.88rem', margin: '0 0 14px', lineHeight: 1.65 }}>
+          아직 등록된 현장이 없습니다. 먼저 현장을 만들어야 주문·배분·추적을 쓸 수 있습니다.
+        </p>
+      )}
       {!demoMode && !profile?.companyId && (
         <div style={{ marginBottom: 12 }}>
           <Alert tone="bad" title="소속 회사가 없습니다">
