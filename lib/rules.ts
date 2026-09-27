@@ -138,6 +138,53 @@ export const KS_TABLE: {
   { type: '고강도', agg: [15, 20, 25], kind: 'flow', slump: [500, 600, 700], strength: [40, 45, 50, 55, 60] },
 ];
 
+/**
+ * 직접입력 허용 범위.
+ *
+ * KS F 4009 표에 없는 조합도 협의로 생산한다 — 고강도 45MPa, 골재 15mm 같은 것이
+ * 실제로 쓰인다. 그래서 표 밖이라고 막지 않고, 물리적으로 말이 되는 범위만 검사한다.
+ * 표 안인지 아닌지는 isKsSpec() 이 따로 알려 준다.
+ */
+export const SPEC_LIMITS = Object.freeze({
+  /** [가정] 굵은골재 최대치수 — 국내 유통 범위 */
+  AGG_MIN_MM: 5,
+  AGG_MAX_MM: 80,
+  /** [가정] 호칭강도(포장은 휨강도) */
+  STRENGTH_MIN_MPA: 0,
+  STRENGTH_MAX_MPA: 100,
+  /** [가정] 슬럼프 */
+  SLUMP_MIN_MM: 0,
+  SLUMP_MAX_MM: 300,
+  /** [가정] 슬럼프 플로 — 고유동 콘크리트 */
+  FLOW_MIN_MM: 300,
+  FLOW_MAX_MM: 850,
+});
+
+/**
+ * 직접입력 값 검사. 문제가 없으면 null.
+ * 화면에 그대로 띄울 한 줄이라 "무엇을 어떻게 고쳐야 하는지"까지 적는다.
+ */
+export function validateSpec(s: Spec): string | null {
+  const L = SPEC_LIMITS;
+
+  if (!Number.isInteger(s.aggMm) || s.aggMm < L.AGG_MIN_MM || s.aggMm > L.AGG_MAX_MM) {
+    return `굵은골재 최대치수를 ${L.AGG_MIN_MM}~${L.AGG_MAX_MM}mm 사이 정수로 입력하세요`;
+  }
+  if (!(s.strength > L.STRENGTH_MIN_MPA && s.strength <= L.STRENGTH_MAX_MPA)) {
+    const what = s.type === '포장' ? '휨강도' : '호칭강도';
+    return `${what}를 ${L.STRENGTH_MIN_MPA} 초과 ${L.STRENGTH_MAX_MPA}MPa 이하로 입력하세요`;
+  }
+  if (s.slumpKind === 'slump' && !(s.slumpMm >= L.SLUMP_MIN_MM && s.slumpMm <= L.SLUMP_MAX_MM)) {
+    return `슬럼프를 ${L.SLUMP_MIN_MM}~${L.SLUMP_MAX_MM}mm 사이로 입력하세요`;
+  }
+  if (s.slumpKind === 'flow' && !(s.slumpMm >= L.FLOW_MIN_MM && s.slumpMm <= L.FLOW_MAX_MM)) {
+    return `슬럼프 플로를 ${L.FLOW_MIN_MM}~${L.FLOW_MAX_MM}mm 사이로 입력하세요`;
+  }
+  if (!s.cement) return '시멘트 종류를 고르세요';
+
+  return null;
+}
+
 /** KS 표에 있는 조합인가 */
 export const isKsSpec = (s: Spec): boolean =>
   KS_TABLE.some(

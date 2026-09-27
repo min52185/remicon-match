@@ -54,6 +54,8 @@ function OrderBody({ site }: { site: Site }) {
   const mounted = useMounted();
 
   const [spec, setSpec] = useState<Spec>(DEFAULT_SPEC);
+  /** 사양 직접입력이 잘못된 동안에는 주문을 못 보내게 잠근다 */
+  const [specError, setSpecError] = useState<string | null>(null);
   const [volumeM3, setVolumeM3] = useState(60);
   const [pumpRate, setPumpRate] = useState(40);
   const [pourStartAt, setPourStartAt] = useState<number>(0);
@@ -277,7 +279,7 @@ function OrderBody({ site }: { site: Site }) {
 
       {/* 사양 */}
       <Panel title="레미콘 사양">
-        <SpecPicker spec={spec} onChange={setSpec} />
+        <SpecPicker spec={spec} onChange={setSpec} onInvalid={setSpecError} />
       </Panel>
 
       {/* 물량·시각 */}
@@ -403,14 +405,16 @@ function OrderBody({ site }: { site: Site }) {
         <button
           type="button"
           className="btn btn-primary btn-block"
-          disabled={!selected || selected.level === 'bad' || tempC == null || sending}
+          disabled={!!specError || !selected || selected.level === 'bad' || tempC == null || sending}
           onClick={() => void order()}
         >
           {sending
             ? '보내는 중…'
-            : selected
-              ? `${selected.plant.name}에 ${m3(volumeM3)} 주문하기`
-              : '공장을 골라 주세요'}
+            : specError
+              ? '사양을 확인해 주세요'
+              : selected
+                ? `${selected.plant.name}에 ${m3(volumeM3)} 주문하기`
+                : '공장을 골라 주세요'}
         </button>
         {selected?.level === 'warn' && (
           <p
