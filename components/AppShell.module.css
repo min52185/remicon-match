@@ -167,6 +167,24 @@
   color: var(--color-concrete-dark);
 }
 
+/* 시연 시각이 실제와 벌어졌을 때만 뜬다 — 눌러서 되돌린다 */
+.nowBtn {
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--color-warn);
+  background: transparent;
+  border: 1px solid var(--color-warn);
+  border-radius: var(--radius-sharp);
+  cursor: pointer;
+  text-align: left;
+}
+
+.nowBtn:hover {
+  background: var(--color-warn);
+  color: var(--color-paper);
+}
+
 .speeds {
   display: flex;
   gap: 4px;

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { simClock, SPEED_OPTIONS } from '@/lib/services/clock';
-import { clock } from '@/lib/format';
+import { clock, duration } from '@/lib/format';
 import { useMounted, useNow } from '@/lib/store/hooks';
 import s from './AppShell.module.css';
 
@@ -96,17 +96,38 @@ export default function AppShell({
 /**
  * 시연 배속. 실제 서비스에서는 1배속 고정이지만, 5시간짜리 타설을 발표 자리에서
  * 몇 분 만에 보여 주려면 시계를 빠르게 돌릴 수 있어야 한다.
- * 탭 간 공유라 현장·공장·기사 화면의 시계가 같이 움직인다.
+ *
+ * 시계는 Supabase 에 한 줄로 두고 Realtime 으로 공유한다 — 어느 기기에서 눌러도
+ * 현장·공장·기사 화면이 같이 움직인다. 전에는 브라우저 저장소에만 있어서 기기마다
+ * 따로 갔고, 한쪽만 배속을 올리면 시각이 몇 시간씩 벌어졌다.
  */
 function ClockBar() {
   const now = useNow(500);
   const mounted = useMounted();
   const speed = mounted ? simClock.speed : 1;
 
+  // 시연 시각이 실제와 얼마나 벌어졌는지. 배속을 올린 채 두면 금방 커진다.
+  const drift = mounted ? simClock.driftMinutes() : 0;
+  const off = Math.abs(drift) >= 1;
+
   return (
     <div className={`${s.clockBar} no-print`}>
       <span className={s.clockNow}>{mounted ? clock(now) : '--:--'}</span>
-      <span>시연 배속</span>
+
+      {off ? (
+        <button
+          type="button"
+          className={s.nowBtn}
+          onClick={() => simClock.reset()}
+          title="모든 기기의 시계를 지금 시각으로, 배속을 ×1 로 되돌립니다"
+        >
+          실제보다 {drift > 0 ? `${duration(drift)} 빠름` : `${duration(-drift)} 느림`} · 지금
+          시각으로
+        </button>
+      ) : (
+        <span>시연 배속</span>
+      )}
+
       <div className={s.speeds}>
         {SPEED_OPTIONS.map((v) => (
           <button
