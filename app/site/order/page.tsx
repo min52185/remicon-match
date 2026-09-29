@@ -22,6 +22,7 @@ import {
   PourRules,
   RULES,
   TRUCK_CAPACITY_M3,
+  checkWorkHours,
   specText,
 } from '@/lib/rules';
 import { simClock } from '@/lib/services/clock';
@@ -326,6 +327,7 @@ function OrderBody({ site }: { site: Site }) {
               value={toLocalInput(pourStartAt)}
               onChange={(e) => setPourStartAt(fromLocalInput(e.target.value))}
             />
+            <WorkHourHint startAt={pourStartAt} volumeM3={volumeM3} pumpRate={pumpRate} />
           </label>
           <label className="field">
             <span className="label">
@@ -537,5 +539,41 @@ function StockAge({ updatedAt }: { updatedAt?: number }) {
       출하 현황 {ago(updatedAt, now)}
       {stale && ' — 오래됐습니다. 주문 전에 공장에 확인하세요.'}
     </p>
+  );
+}
+
+
+/**
+ * 8·5제 — 타설 시각을 고르는 그 자리에서 알린다.
+ *
+ * 타설 종료 예상 = 시작 + 물량 ÷ 펌프 속도. 이게 오후 5시를 넘으면 기사가
+ * 퇴근해 타설이 끊긴다. 주문을 보낸 뒤에 알면 늦으므로 시각 칸 바로 아래에 둔다.
+ */
+function WorkHourHint({
+  startAt,
+  volumeM3,
+  pumpRate,
+}: {
+  startAt: number;
+  volumeM3: number;
+  pumpRate: number;
+}) {
+  if (!startAt || pumpRate <= 0) return null;
+
+  const endAt = startAt + (volumeM3 / pumpRate) * 60 * MIN;
+  const check = checkWorkHours(startAt, endAt);
+  if (check.level === 'ok') return null;
+
+  return (
+    <span
+      style={{
+        display: 'block',
+        fontSize: '0.78rem',
+        marginTop: 4,
+        color: check.level === 'bad' ? 'var(--color-bad)' : 'var(--color-warn)',
+      }}
+    >
+      {check.message}
+    </span>
   );
 }

@@ -15,7 +15,7 @@ import { useEffect, useState, useRef } from 'react';
 import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
-import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
+import { Alert, Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { clock, duration, failure, fromLocalInput, m3, toLocalInput } from '@/lib/format';
 import type { AllocationResult, NaiveResult } from '@/lib/ai/allocate';
 import {
@@ -25,6 +25,8 @@ import {
   PourRules,
   TRUCK_CAPACITY_M3,
   specText,
+  WORK_HOURS,
+  checkWorkHours,
 } from '@/lib/rules';
 import { simClock } from '@/lib/services/clock';
 import { getRoutesToSite } from '@/lib/services/route';
@@ -388,6 +390,9 @@ function AllocateBody({ site }: { site: Site }) {
             <Row label="타설 예정">
               {clock(result.pourStartAt)} ~ {clock(result.pourEndAt)}
             </Row>
+
+            {/* 8·5제 — 5시를 넘기면 기사가 퇴근해 타설이 끊긴다 */}
+            <WorkHourNotice startAt={result.pourStartAt} endAt={result.pourEndAt} />
             {result.feasible && (
               <Row label="이동시간 합">
                 {result.totalTravelMinutes}분{' '}
@@ -589,5 +594,45 @@ function AllocateBody({ site }: { site: Site }) {
         </>
       )}
     </>
+  );
+}
+
+
+/* ==========================================================================
+ * 8·5제 알림
+ *
+ * 오전 8시 상차 ~ 오후 5시 하차, 점심 1시간을 뺀 하루 8시간. 건설사는 양생
+ * 때문에 60~90분 안에 일괄 타설을 끝내야 하는데, 기사가 5시에 퇴근하면 타설이
+ * 그 자리에서 끊긴다 — 콜드조인트가 생긴다.
+ *
+ * 막지는 않는다. 야간 타설이나 협의 연장은 실제로 있다. 대신 계획을 짤 때
+ * "이대로면 몇 분 넘는다" 를 숫자로 알린다 — 당일 현장에서 알면 이미 늦다.
+ * ======================================================================== */
+
+function WorkHourNotice({ startAt, endAt }: { startAt: number; endAt: number }) {
+  const check = checkWorkHours(startAt, endAt);
+  if (check.level === 'ok') {
+    return (
+      <Row label="8·5제">
+        <Tag tone="ok">근무시간 내</Tag>
+      </Row>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <Alert
+        tone={check.level}
+        title={check.level === 'bad' ? '8·5제 근무시간을 넘깁니다' : '8·5제 — 빠듯합니다'}
+      >
+        {check.message}
+        {check.hitsLunch && check.level === 'bad' && (
+          <>
+            {' '}
+            점심시간({WORK_HOURS.LUNCH_START_HOUR}~{WORK_HOURS.LUNCH_END_HOUR}시)과도 겹칩니다.
+          </>
+        )}
+      </Alert>
+    </div>
   );
 }

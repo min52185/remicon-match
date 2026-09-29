@@ -66,6 +66,124 @@ export const RULES = Object.freeze({
   COLD_JOINT_LIMIT_NORMAL_MIN: 150,
 });
 
+/* ==========================================================================
+ * 8·5제 — 레미콘 운송 근무시간
+ *
+ * 오전 8시 상차 ~ 오후 5시 하차, 점심 1시간을 빼고 하루 8시간 근무.
+ * 대한건설기계사업자총연합회가 건설기계 27개 업종에 차례로 적용해 왔고,
+ * 레미콘 업종도 들어갔다.
+ *
+ * 현장과 정면으로 부딪히는 제도다. 건설사는 양생 때문에 60~90분 안에 일괄
+ * 타설을 끝내야 하는데, 기사가 5시에 퇴근하면 타설이 그 자리에서 끊긴다 —
+ * 콜드조인트가 생긴다. 그래서 현장은 차를 더 부르고, 그만큼 비용이 오른다.
+ *
+ * 우리 앱이 할 일은 "5시를 넘길 것 같다" 를 타설 계획을 짤 때 미리 알리는 것이다.
+ * 당일 현장에서 알면 이미 늦다.
+ *
+ * 출처: 대한경제·동양일보·전북일보 등 2024~2026 보도
+ * ======================================================================== */
+
+export const WORK_HOURS = Object.freeze({
+  /** 상차 시작 — 이 시각 이전에는 공장이 차를 못 내보낸다 */
+  START_HOUR: 8,
+  /** 하차 종료 — 이 시각까지 타설이 끝나야 한다 */
+  END_HOUR: 17,
+  /**
+   * [가정] 점심시간. 보도는 "점심 1시간 제외" 라고만 한다.
+   * 몇 시부터인지는 공장·지역마다 달라 흔한 12~13시로 둔다.
+   */
+  LUNCH_START_HOUR: 12,
+  LUNCH_END_HOUR: 13,
+  /** [가정] 종료 이 분 전부터 "빠듯하다" 고 알린다 */
+  END_WARN_MIN: 60,
+});
+
+/** 그날의 8·5제 구간 — 주어진 시각이 속한 날 기준 */
+export function workWindow(at: number) {
+  const day = new Date(at);
+  const set = (h: number) => {
+    const d = new Date(day);
+    d.setHours(h, 0, 0, 0);
+    return d.getTime();
+  };
+  return {
+    start: set(WORK_HOURS.START_HOUR),
+    end: set(WORK_HOURS.END_HOUR),
+    lunchStart: set(WORK_HOURS.LUNCH_START_HOUR),
+    lunchEnd: set(WORK_HOURS.LUNCH_END_HOUR),
+  };
+}
+
+/** 이 시각에 기사가 일하고 있나 (점심시간은 뺀다) */
+export function isWorkingHour(at: number): boolean {
+  const w = workWindow(at);
+  if (at < w.start || at >= w.end) return false;
+  return !(at >= w.lunchStart && at < w.lunchEnd);
+}
+
+export type WorkHourLevel = 'ok' | 'warn' | 'bad';
+
+export interface WorkHourCheck {
+  level: WorkHourLevel;
+  message: string;
+  /** 타설 종료 예상이 8·5제 밖이면 몇 분 넘는지 */
+  overMin: number;
+  /** 점심시간과 겹치는가 */
+  hitsLunch: boolean;
+}
+
+/**
+ * 타설 계획이 8·5제 안에 들어오는지 본다.
+ *
+ * 막지는 않는다. 야간 타설이나 협의 연장은 실제로 있고, 그럴 때 화면이 주문을
+ * 거부하면 쓸 수 없는 앱이 된다. 대신 "이대로면 몇 분 넘는다" 를 숫자로 알린다.
+ */
+export function checkWorkHours(startAt: number, endAt: number): WorkHourCheck {
+  const w = workWindow(startAt);
+  const overMin = Math.max(0, Math.round((endAt - w.end) / MIN));
+  const hitsLunch = startAt < w.lunchEnd && endAt > w.lunchStart;
+
+  if (startAt < w.start) {
+    const lateMin = Math.round((w.start - startAt) / MIN);
+    return {
+      level: 'bad',
+      message: `타설 시작이 오전 ${WORK_HOURS.START_HOUR}시보다 ${lateMin}분 빠릅니다. 8·5제에서는 그 시각부터 상차합니다 — 공장과 따로 협의해야 합니다.`,
+      overMin,
+      hitsLunch,
+    };
+  }
+
+  if (overMin > 0) {
+    return {
+      level: 'bad',
+      message: `타설 종료가 오후 ${WORK_HOURS.END_HOUR - 12}시를 ${overMin}분 넘깁니다. 8·5제에서는 기사가 퇴근하는 시각이라 타설이 끊길 수 있습니다. 물량을 줄이거나 시작을 앞당기세요.`,
+      overMin,
+      hitsLunch,
+    };
+  }
+
+  const slackMin = Math.round((w.end - endAt) / MIN);
+  if (slackMin < WORK_HOURS.END_WARN_MIN) {
+    return {
+      level: 'warn',
+      message: `타설 종료 예상이 퇴근시간(오후 ${WORK_HOURS.END_HOUR - 12}시)까지 ${slackMin}분 남습니다. 조금만 밀려도 넘깁니다.`,
+      overMin: 0,
+      hitsLunch,
+    };
+  }
+
+  if (hitsLunch) {
+    return {
+      level: 'warn',
+      message: `타설이 점심시간(${WORK_HOURS.LUNCH_START_HOUR}~${WORK_HOURS.LUNCH_END_HOUR}시)과 겹칩니다. 그 사이 출하가 멈출 수 있으니 공장과 미리 맞추세요.`,
+      overMin: 0,
+      hitsLunch,
+    };
+  }
+
+  return { level: 'ok', message: '8·5제 근무시간 안에서 끝납니다.', overMin: 0, hitsLunch };
+}
+
 /** [가정] 믹서트럭 1대 적재량 — 실제 운행 기록이 쌓이면 고친다 */
 export const TRUCK_CAPACITY_M3 = 6;
 /** [가정] 현장 도착 후 하역·타설 추정 시간 */
