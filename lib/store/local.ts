@@ -465,3 +465,30 @@ export async function createTruck(input: NewTruck): Promise<string> {
   commit({ ...db, trucks: [...db.trucks, truck] });
   return id;
 }
+
+/** 차량 정보 고치기 — 차량번호·적재량 */
+export async function updateTruck(
+  truckId: string,
+  patch: Partial<Pick<Truck, 'plateNo' | 'capacityM3'>>,
+) {
+  update((d) => ({
+    ...d,
+    trucks: d.trucks.map((t) => (t.id === truckId ? { ...t, ...patch } : t)),
+  }));
+}
+
+/**
+ * 차량 지우기.
+ * 운행 기록(배송)이 있는 차는 지우지 않는다 — 지난 납품서가 어느 차로 갔는지
+ * 알 수 없게 된다. 기사가 맡고 있는 차도 막는다.
+ */
+export async function deleteTruck(truckId: string) {
+  ensureHydrated();
+  const truck = db.trucks.find((t) => t.id === truckId);
+  if (!truck) return;
+  if (truck.driverId) throw new Error('기사가 맡고 있는 차량입니다. 반납 후에 지울 수 있습니다.');
+  if (db.deliveries.some((d) => d.truckId === truckId)) {
+    throw new Error('운행 기록이 있는 차량은 지울 수 없습니다.');
+  }
+  commit({ ...db, trucks: db.trucks.filter((t) => t.id !== truckId) });
+}

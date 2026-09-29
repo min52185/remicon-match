@@ -62,3 +62,5 @@ export const createSite = backend.createSite;
 export const createPlant = backend.createPlant;
 export const updatePlantInfo = backend.updatePlantInfo;
 export const createTruck = backend.createTruck;
+export const updateTruck = backend.updateTruck;
+export const deleteTruck = backend.deleteTruck;

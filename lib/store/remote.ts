@@ -49,6 +49,7 @@ import type {
   Order,
   OrderStatus,
   Plant,
+  Truck,
   TruckLocation,
 } from '../types';
 import {
@@ -681,5 +682,42 @@ export async function saveNotePhoto(deliveryId: string, notePhotoPath: string | 
     .update({ note_photo_path: notePhotoPath ?? null })
     .eq('id', deliveryId);
   if (error) throw error;
+  await refresh();
+}
+
+/** 차량 정보 고치기 — 차량번호·적재량 */
+export async function updateTruck(
+  truckId: string,
+  patch: Partial<Pick<Truck, 'plateNo' | 'capacityM3'>>,
+) {
+  const sb = client();
+  const row: Record<string, unknown> = {};
+  if (patch.plateNo !== undefined) row.plate_no = patch.plateNo;
+  if (patch.capacityM3 !== undefined) row.capacity_m3 = patch.capacityM3;
+
+  const { error } = await sb.from('trucks').update(row).eq('id', truckId);
+  if (error) throw error;
+  await refresh();
+}
+
+/**
+ * 차량 지우기.
+ * deliveries.truck_id 가 on delete restrict 라, 운행 기록이 있으면 DB 가 막는다.
+ * 그 오류를 사람이 읽을 수 있는 말로 바꿔 준다.
+ */
+export async function deleteTruck(truckId: string) {
+  const sb = client();
+  const truck = db.trucks.find((t) => t.id === truckId);
+  if (truck?.driverId) {
+    throw new Error('기사가 맡고 있는 차량입니다. 반납 후에 지울 수 있습니다.');
+  }
+
+  const { error } = await sb.from('trucks').delete().eq('id', truckId);
+  if (error) {
+    if (error.code === '23503') {
+      throw new Error('운행 기록이 있는 차량은 지울 수 없습니다.');
+    }
+    throw error;
+  }
   await refresh();
 }

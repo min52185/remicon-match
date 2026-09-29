@@ -15,12 +15,25 @@ import Link from 'next/link';
 import { useState, useRef } from 'react';
 import CapabilityForm, { EMPTY_CAPABILITY, validateCapability } from '@/components/CapabilityForm';
 import LocationPicker, { type PickedLocation } from '@/components/LocationPicker';
+import TruckListEditor, {
+  emptyTruck,
+  fillBlankPlates,
+  validateTrucks,
+  type TruckDraft,
+} from '@/components/TruckListEditor';
 import { PlantShell } from '@/components/RoleShells';
 import { Alert, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { failure } from '@/lib/format';
 import { TRUCK_CAPACITY_M3 } from '@/lib/rules';
-import { createPlant, updatePlantInfo } from '@/lib/store';
+import {
+  createPlant,
+  createTruck,
+  deleteTruck,
+  store,
+  updatePlantInfo,
+  updateTruck,
+} from '@/lib/store';
 import { useDb } from '@/lib/store/hooks';
 import type { Plant, PlantCapability } from '@/lib/types';
 
@@ -149,9 +162,23 @@ function PlantForm({
   const [where, setWhere] = useState<PickedLocation | null>(
     plant ? { address: plant.address, lat: plant.lat, lng: plant.lng } : null,
   );
-  const [fleet, setFleet] = useState(String(plant?.fleetSize ?? 10));
   const [hourly, setHourly] = useState(String(plant?.hourlyRate ?? 4));
   const [cap, setCap] = useState<PlantCapability>(plant?.cap ?? EMPTY_CAPABILITY);
+
+  const db = useDb();
+  const [trucks, setTrucks] = useState<TruckDraft[]>(() => {
+    if (!plant) return [emptyTruck()];
+    const mine = db.trucks
+      .filter((x) => x.plantId === plant.id)
+      .sort((a, b) => a.no - b.no)
+      .map((x) => ({
+        id: x.id,
+        plateNo: x.plateNo,
+        capacityM3: x.capacityM3,
+        driverName: x.driverId ? x.driver : undefined,
+      }));
+    return mine.length > 0 ? mine : [emptyTruck()];
+  });
 
   const [saving, setSaving] = useState(false);
   // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
@@ -160,7 +187,12 @@ function PlantForm({
   const [error, setError] = useState<string | null>(null);
 
   const effectiveAddress = address || where?.address || '';
-  const fleetN = Number(fleet);
+  /**
+   * 보유 대수는 차량 목록의 길이다.
+   * 전에는 숫자를 따로 받았는데, 실제 차량 행을 안 만들어서 "보유 12대" 인데
+   * 배차 목록은 비어 있는 공장이 생겼다. 셀 곳을 하나로 두면 어긋날 수 없다.
+   */
+  const fleetN = trucks.length;
   const hourlyN = Number(hourly);
 
   const problem =
@@ -170,11 +202,11 @@ function PlantForm({
         ? '지도에서 공장 위치를 골라 주세요'
         : effectiveAddress.trim().length < 2
           ? '주소를 적어 주세요'
-          : !Number.isInteger(fleetN) || fleetN < 0 || fleetN > 99
-            ? '보유 차량은 0~99대 정수로 적어 주세요'
+          : fleetN > 99
+            ? '차량은 99대까지 등록할 수 있습니다'
             : !Number.isInteger(hourlyN) || hourlyN < 1 || hourlyN > 60
               ? '한 현장 시간당 출하 대수는 1~60대로 적어 주세요'
-              : validateCapability(cap);
+              : (validateTrucks(trucks) ?? validateCapability(cap));
 
   async function save() {
     if (busyRef.current || problem || !where) return;
@@ -192,8 +224,18 @@ function PlantForm({
         hourlyRate: hourlyN,
         cap,
       };
-      if (editing) await updatePlantInfo(plant.id, data);
-      else await createPlant(data);
+      const filled = fillBlankPlates(trucks);
+
+      if (editing) {
+        await updatePlantInfo(plant.id, data);
+        await syncTrucks(plant.id, filled);
+      } else {
+        const plantId = await createPlant(data);
+        // 공장을 먼저 만들어야 차량이 붙을 곳이 생긴다
+        for (const tr of filled) {
+          await createTruck({ plantId, plateNo: tr.plateNo, capacityM3: tr.capacityM3 });
+        }
+      }
       onDone();
     } catch (e) {
       setError(failure(e, editing ? '고치지 못했습니다.' : '공장을 등록하지 못했습니다.'));
@@ -275,18 +317,6 @@ function PlantForm({
         }}
       >
         <label className="field">
-          <span className="label">보유 믹서트럭 (대)</span>
-          <input
-            className="input"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={99}
-            value={fleet}
-            onChange={(e) => setFleet(e.target.value)}
-          />
-        </label>
-        <label className="field">
           <span className="label">한 현장 시간당 출하 (대/h)</span>
           <input
             className="input"
@@ -299,10 +329,12 @@ function PlantForm({
           />
           <span style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)' }}>
             약 {hourlyN > 0 ? hourlyN * TRUCK_CAPACITY_M3 : 0}m³/h. 공장은 여러 현장에 동시에
-            납품하므로 보유 대수를 한 현장에 다 쏟지 못합니다.
+            납품하므로 보유 {fleetN}대를 한 현장에 다 쏟지 못합니다.
           </span>
         </label>
       </div>
+
+      <TruckListEditor value={trucks} onChange={setTrucks} disabled={saving} />
 
       <CapabilityForm value={cap} onChange={setCap} />
 
@@ -344,4 +376,31 @@ function PlantForm({
       )}
     </Panel>
   );
+}
+
+/**
+ * 차량 목록을 DB 와 맞춘다.
+ *
+ * 지운 줄 → 삭제, 새 줄 → 생성, 번호·적재량이 바뀐 줄 → 수정.
+ * 삭제는 실패할 수 있다(운행 기록이 있거나 기사가 맡은 차). 그때는 그 차만
+ * 건너뛰지 않고 오류를 올린다 — 조용히 남겨 두면 화면과 DB 가 달라진다.
+ */
+async function syncTrucks(plantId: string, next: TruckDraft[]) {
+  const before = store.snapshot().trucks.filter((t) => t.plantId === plantId);
+  const keep = new Set(next.map((t) => t.id).filter(Boolean));
+
+  for (const old of before) {
+    if (!keep.has(old.id)) await deleteTruck(old.id);
+  }
+
+  for (const tr of next) {
+    if (!tr.id) {
+      await createTruck({ plantId, plateNo: tr.plateNo, capacityM3: tr.capacityM3 });
+      continue;
+    }
+    const old = before.find((x) => x.id === tr.id);
+    if (old && (old.plateNo !== tr.plateNo || old.capacityM3 !== tr.capacityM3)) {
+      await updateTruck(tr.id, { plateNo: tr.plateNo, capacityM3: tr.capacityM3 });
+    }
+  }
 }
