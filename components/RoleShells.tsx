@@ -30,6 +30,7 @@ import { Empty, Panel, Row } from './ui';
 import { useAuth } from '@/lib/auth';
 import { HOME_BY_ROLE, ROLE_LABEL } from '@/lib/routes';
 import { useDb, useSelection } from '@/lib/store/hooks';
+import { useUrgentAlert } from '@/lib/useUrgentAlert';
 import type { Plant, Role, Site } from '@/lib/types';
 import s from './AppShell.module.css';
 
@@ -205,16 +206,26 @@ export function PlantShell({
   const [plantId, setPlantId] = useSelection('plant', mine[0]?.id ?? '');
   const plant = mine.find((x) => x.id === plantId) ?? mine[0];
 
-  const newOrders = db.orders.filter(
+  const pendingOrders = db.orders.filter(
     (o) => o.plantId === plant?.id && o.status === 'requested',
-  ).length;
+  );
+  const newOrders = pendingOrders.length;
+
+  // 긴급은 따로 센다 — 소리와 배너를 띄우고, 탭에는 붉은 배지를 단다
+  const urgent = useUrgentAlert(pendingOrders.filter((o) => o.urgent).map((o) => o.id));
   const toDispatch = db.orders.filter(
     (o) => o.plantId === plant?.id && o.status === 'accepted',
   ).length;
 
   const tabs = [
     { href: '/plant', label: '출하 현황', icon: <IconFactory /> },
-    { href: '/plant/orders', label: '주문 관리', icon: <IconInbox />, badge: newOrders },
+    {
+      href: '/plant/orders',
+      label: '주문 관리',
+      icon: <IconInbox />,
+      badge: newOrders,
+      urgent: urgent.count > 0,
+    },
     { href: '/plant/dispatch', label: '배차', icon: <IconSend />, badge: toDispatch },
     { href: '/plant/register', label: '공장 등록', icon: <IconPin /> },
   ];
@@ -247,6 +258,19 @@ export function PlantShell({
         </>
       }
     >
+      {urgent.fresh && (
+        <div className={s.urgentBanner} role="alert">
+          <strong>긴급주문 {urgent.count}건이 들어왔습니다</strong>
+          <span>현장이 타설 공백을 겪고 있습니다. 수락 여부를 바로 알려 주세요.</span>
+          <Link href="/plant/orders" className="btn btn-primary btn-sm">
+            확인하러 가기
+          </Link>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={urgent.dismiss}>
+            닫기
+          </button>
+        </div>
+      )}
+
       {plant ? (
         children(plant)
       ) : empty ? (

@@ -117,10 +117,17 @@ const SEED: PlantSeed[] = [
  */
 const hourlyRateOf = (fleetSize: number) => Math.max(2, Math.round(fleetSize / 3));
 
+/**
+ * [가정] 상차 준비시간 — 설비가 큰 공장일수록 짧다.
+ * 긴급 매칭이 이동시간만으로 결정되지 않게 공장마다 다르게 둔다.
+ */
+const prepMinutesOf = (fleetSize: number) => (fleetSize >= 14 ? 8 : fleetSize >= 10 ? 10 : 14);
+
 export const SEED_PLANTS: Plant[] = SEED.map((p) => ({
   ...p,
   phone: `031-000-10${p.id.slice(1)}`,
   hourlyRate: hourlyRateOf(p.fleetSize),
+  prepMinutes: prepMinutesOf(p.fleetSize),
 }));
 
 const DRIVER_SURNAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황'];

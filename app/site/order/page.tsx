@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
+import UrgentRequest from '@/components/UrgentRequest';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { ago, duration, failure, fromLocalInput, m3, toLocalInput } from '@/lib/format';
 import {
@@ -288,6 +289,21 @@ function OrderBody({ site }: { site: Site }) {
           </div>
         </Panel>
       )}
+
+      {/* 긴급주문 — 지금 당장 필요할 때는 공장을 고르는 단계 자체를 건너뛴다 */}
+      <Panel title="지금 당장 필요하신가요?">
+        <p style={{ fontSize: '0.88rem', margin: '0 0 4px', lineHeight: 1.6 }}>
+          <strong>긴급주문</strong>은 타설 시각을 고르지 않습니다. 사양과 대수만 적으면 AI 가{' '}
+          <strong>지금 가장 빨리 올 수 있는 공장</strong>을 골라 바로 보냅니다 — 상차 준비시간과
+          실시간 교통을 함께 계산합니다.
+        </p>
+        <UrgentRequest
+          site={site}
+          tempC={tempC ?? undefined}
+          defaultReason=""
+          label="긴급주문 — AI 가 가장 빠른 공장으로"
+        />
+      </Panel>
 
       {/* 사양 */}
       <Panel title="레미콘 사양">

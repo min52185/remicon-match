@@ -25,7 +25,7 @@ import { PlantShell } from '@/components/RoleShells';
 import { Alert, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { failure } from '@/lib/format';
-import { TRUCK_CAPACITY_M3 } from '@/lib/rules';
+import { RULES, TRUCK_CAPACITY_M3 } from '@/lib/rules';
 import {
   createPlant,
   createTruck,
@@ -163,6 +163,7 @@ function PlantForm({
     plant ? { address: plant.address, lat: plant.lat, lng: plant.lng } : null,
   );
   const [hourly, setHourly] = useState(String(plant?.hourlyRate ?? 4));
+  const [prep, setPrep] = useState(String(plant?.prepMinutes ?? RULES.DEFAULT_PREP_MIN));
   const [cap, setCap] = useState<PlantCapability>(plant?.cap ?? EMPTY_CAPABILITY);
 
   const db = useDb();
@@ -194,6 +195,7 @@ function PlantForm({
    */
   const fleetN = trucks.length;
   const hourlyN = Number(hourly);
+  const prepN = Number(prep);
 
   const problem =
     name.trim().length < 2
@@ -206,6 +208,8 @@ function PlantForm({
             ? '차량은 99대까지 등록할 수 있습니다'
             : !Number.isInteger(hourlyN) || hourlyN < 1 || hourlyN > 60
               ? '한 현장 시간당 출하 대수는 1~60대로 적어 주세요'
+              : !Number.isInteger(prepN) || prepN < 1 || prepN > 120
+                ? '상차 준비시간은 1~120분 사이 정수로 적어 주세요'
               : (validateTrucks(trucks) ?? validateCapability(cap));
 
   async function save() {
@@ -222,6 +226,7 @@ function PlantForm({
         lng: where.lng,
         fleetSize: fleetN,
         hourlyRate: hourlyN,
+        prepMinutes: prepN,
         cap,
       };
       const filled = fillBlankPlates(trucks);
@@ -316,6 +321,22 @@ function PlantForm({
           gap: 12,
         }}
       >
+        <label className="field">
+          <span className="label">상차 준비시간 (분)</span>
+          <input
+            className="input"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={120}
+            value={prep}
+            onChange={(e) => setPrep(e.target.value)}
+          />
+          <span style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)' }}>
+            주문을 받고 비비기를 시작해 차가 공장을 나서기까지. <strong>긴급주문 매칭</strong>에서
+            이동시간과 더해 &lsquo;가장 빨리 오는 공장&rsquo;을 정합니다.
+          </span>
+        </label>
         <label className="field">
           <span className="label">한 현장 시간당 출하 (대/h)</span>
           <input

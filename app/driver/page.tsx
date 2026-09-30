@@ -40,6 +40,7 @@ import {
 } from '@/lib/store';
 import { useDb, useMounted, useNow } from '@/lib/store/hooks';
 import { useAuth } from '@/lib/auth';
+import { useUrgentAlert } from '@/lib/useUrgentAlert';
 import type { Delivery, Truck } from '@/lib/types';
 
 /** 위치를 보내는 주기 — 지시서 3장: 10~15초 */
@@ -74,6 +75,12 @@ function DriverBody() {
 
   const changes = useDispatchChanges(open);
 
+  // 긴급 배차는 소리로도 알린다 — 기사는 운전 중이라 화면을 계속 볼 수 없다
+  const urgentIds = open
+    .filter((d) => db.orders.find((o) => o.id === d.orderId)?.urgent)
+    .map((d) => d.id);
+  const urgent = useUrgentAlert(urgentIds);
+
   if (!mounted) return <Empty>불러오는 중…</Empty>;
 
   return (
@@ -81,6 +88,22 @@ function DriverBody() {
       <MockNotice>
         시연용 가상 데이터입니다. 실제 GPS 를 켜면 이 브라우저의 위치가 현장 화면에 표시됩니다.
       </MockNotice>
+
+      {urgent.fresh && (
+        <Panel style={{ borderWidth: 2, borderColor: 'var(--color-bad)' }}>
+          <Alert tone="bad" title={`긴급 배차 ${urgent.count}건`}>
+            현장이 타설 공백을 겪고 있습니다. 아래 배송을 먼저 처리해 주세요.
+          </Alert>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm btn-block"
+            style={{ marginTop: 12 }}
+            onClick={urgent.dismiss}
+          >
+            확인했습니다
+          </button>
+        </Panel>
+      )}
 
       {changes.list.length > 0 && (
         <Panel style={{ borderWidth: 2, borderColor: 'var(--color-rust)' }}>
@@ -184,10 +207,12 @@ function useDispatchChanges(open: Delivery[]) {
       const truck = db.trucks.find((t) => t.id === d.truckId);
       const was = before.get(d.id);
 
+      const isUrgent = db.orders.find((o) => o.id === d.orderId)?.urgent === true;
+
       if (was == null) {
         found.push({
-          tone: 'accent',
-          title: '새 배차',
+          tone: isUrgent ? 'warn' : 'accent',
+          title: isUrgent ? '긴급 배차' : '새 배차',
           detail: `${truck?.no ?? '?'}호차 · ${site?.name ?? ''} · ${m3(d.volumeM3)} — 비비기 ${clock(
             d.mixStartAt,
           )}`,
@@ -218,7 +243,7 @@ function useDispatchChanges(open: Delivery[]) {
 
     seen.current = nowMap;
     if (found.length > 0) setList((prev) => [...found, ...prev].slice(0, 5));
-  }, [signature, db.sites, db.trucks]);
+  }, [signature, db.sites, db.trucks, db.orders]);
 
   return { list, dismiss: () => setList([]) };
 }
@@ -424,9 +449,22 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
   return (
     <Panel
       title={`${truck?.no}호차 · ${site?.name ?? ''}`}
-      aside={<Tag tone={PHASE_TONE[phase]}>{PHASE_LABEL[phase]}</Tag>}
+      aside={
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {order?.urgent && <Tag tone="bad">긴급</Tag>}
+          <Tag tone={PHASE_TONE[phase]}>{PHASE_LABEL[phase]}</Tag>
+        </span>
+      }
       style={{ borderWidth: tracking ? 2 : 1, borderColor: tracking ? 'var(--color-rust)' : undefined }}
     >
+      {order?.urgent && (
+        <div style={{ marginBottom: 12 }}>
+          <Alert tone="bad" title="긴급 배차입니다">
+            {order.urgentReason ?? '현장이 타설 공백을 겪고 있습니다.'} 바로 출발해 주세요.
+          </Alert>
+        </div>
+      )}
+
       {/* 현장 위치와 추천 경로 — 기사가 가장 먼저 보는 것 */}
       {site && (
         <div style={{ marginBottom: 12 }}>

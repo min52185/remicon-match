@@ -19,6 +19,8 @@ export interface TabDef {
    * exact 를 켜야 한다 — 안 그러면 '/site/order' 에서 두 탭이 같이 켜진다.
    */
   exact?: boolean;
+  /** 배지를 긴급 색으로 — 보통 알림과 구분한다 */
+  urgent?: boolean;
 }
 
 interface Props {
@@ -82,7 +84,11 @@ export default function AppShell({
             >
               <span style={{ position: 'relative', display: 'inline-flex' }}>
                 {t.icon}
-                {!!t.badge && <span className={s.badge}>{t.badge > 9 ? '9+' : t.badge}</span>}
+                {!!t.badge && (
+                  <span className={s.badge + (t.urgent ? ' ' + s.badgeUrgent : '')}>
+                    {t.badge > 9 ? '9+' : t.badge}
+                  </span>
+                )}
               </span>
               {t.label}
             </Link>

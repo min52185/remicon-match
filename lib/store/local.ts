@@ -434,7 +434,12 @@ export async function createPlant(input: NewPlant): Promise<string> {
 /** 공장 정보·생산 능력 고치기 (출하 현황과 달리 자주 바뀌지 않는 값) */
 export async function updatePlantInfo(
   plantId: string,
-  patch: Partial<Pick<Plant, 'name' | 'address' | 'phone' | 'lat' | 'lng' | 'fleetSize' | 'hourlyRate' | 'cap'>>,
+  patch: Partial<
+    Pick<
+      Plant,
+      'name' | 'address' | 'phone' | 'lat' | 'lng' | 'fleetSize' | 'hourlyRate' | 'prepMinutes' | 'cap'
+    >
+  >,
 ) {
   update((d) => ({
     ...d,

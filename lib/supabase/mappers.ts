@@ -8,7 +8,7 @@
  * DB 에 중복 저장하지 않고 유도하는 편이 어긋날 여지가 없다.
  */
 
-import { MIN } from '../rules';
+import { MIN, RULES } from '../rules';
 import type {
   AllocationItem,
   AllocationPlan,
@@ -54,6 +54,7 @@ export interface PlantRow {
   capability: PlantCapability;
   fleet_size: number;
   hourly_rate: number;
+  prep_minutes: number | null;
 }
 
 export interface PlantStatusRow {
@@ -192,6 +193,7 @@ export function toPlant(r: PlantRow, status?: PlantStatusRow): Plant {
     phone: r.phone ?? '',
     fleetSize: r.fleet_size,
     hourlyRate: r.hourly_rate,
+    prepMinutes: r.prep_minutes ?? RULES.DEFAULT_PREP_MIN,
     availableTrucks: status?.available_trucks ?? 0,
     availableVolume: Number(status?.available_volume ?? 0),
     isOpen: status?.is_open ?? false,

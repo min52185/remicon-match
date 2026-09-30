@@ -76,6 +76,7 @@ const db = (over: Partial<Db> = {}): Db => ({
       availableTrucks: 3,
       availableVolume: 100,
       hourlyRate: 4,
+      prepMinutes: 10,
       isOpen: true,
       cap: { maxStrength: { 보통: 35 }, aggs: [25], flow: false, cements: [SPEC.cement] },
     },

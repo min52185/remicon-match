@@ -208,3 +208,64 @@
   color: var(--color-paper);
   font-weight: 700;
 }
+
+/* 긴급 배지 — 보통 알림과 색으로 구분하고, 천천히 깜박여 눈에 들어오게 */
+.badgeUrgent {
+  background: var(--color-bad);
+  animation: urgentPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes urgentPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translate(14px, -10px) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translate(14px, -10px) scale(1.18);
+  }
+}
+
+/**
+ * 긴급주문 배너 — 공장이 다른 탭을 보고 있어도 눈에 띄어야 한다.
+ * 화면 위에 붙여 두되, 내용 위를 덮지는 않는다.
+ */
+.urgentBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--color-bad);
+  color: var(--color-paper);
+  border-radius: var(--radius-sharp);
+  font-size: 0.86rem;
+}
+
+.urgentBanner strong {
+  font-size: 0.95rem;
+}
+
+.urgentBanner span {
+  flex: 1;
+  min-width: 180px;
+  opacity: 0.92;
+}
+
+.urgentBanner .btn {
+  flex: none;
+}
+
+/* 배너 위에서는 버튼이 배경과 붙어 보이지 않게 */
+.urgentBanner :global(.btn-ghost) {
+  color: var(--color-paper);
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badgeUrgent {
+    animation: none;
+  }
+}

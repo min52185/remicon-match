@@ -606,6 +606,7 @@ export async function createPlant(input: NewPlant): Promise<string> {
       capability: input.cap,
       fleet_size: input.fleetSize,
       hourly_rate: input.hourlyRate,
+      prep_minutes: input.prepMinutes,
     })
     .select('id')
     .single<{ id: string }>();
@@ -629,7 +630,10 @@ export async function createPlant(input: NewPlant): Promise<string> {
 export async function updatePlantInfo(
   plantId: string,
   patch: Partial<
-    Pick<Plant, 'name' | 'address' | 'phone' | 'lat' | 'lng' | 'fleetSize' | 'hourlyRate' | 'cap'>
+    Pick<
+      Plant,
+      'name' | 'address' | 'phone' | 'lat' | 'lng' | 'fleetSize' | 'hourlyRate' | 'prepMinutes' | 'cap'
+    >
   >,
 ) {
   const sb = client();
@@ -641,6 +645,7 @@ export async function updatePlantInfo(
   if (patch.lng !== undefined) row.lng = patch.lng;
   if (patch.fleetSize !== undefined) row.fleet_size = patch.fleetSize;
   if (patch.hourlyRate !== undefined) row.hourly_rate = patch.hourlyRate;
+  if (patch.prepMinutes !== undefined) row.prep_minutes = patch.prepMinutes;
   if (patch.cap !== undefined) row.capability = patch.cap;
 
   const { error } = await sb.from('plants').update(row).eq('id', plantId);

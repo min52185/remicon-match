@@ -60,6 +60,12 @@ export interface Plant extends LatLng {
   availableVolume: number;
   /** 이 현장 한 곳으로 시간당 내보낼 수 있는 최대 대수 (지시서 6장 제약 ③) */
   hourlyRate: number;
+  /**
+   * 상차 준비시간(분) — 주문을 받고 비비기를 시작해 차가 공장을 나서기까지.
+   * 긴급주문 매칭에서 "가장 빨리 오는 공장" 을 고를 때 이동시간과 함께 더한다.
+   * 믹서가 비어 있으면 5분, 앞 주문을 비비는 중이면 20분 넘게 걸린다.
+   */
+  prepMinutes: number;
   isOpen: boolean;
   /** 공장이 출하 현황을 마지막으로 고친 시각 — 오래됐으면 현장이 믿으면 안 된다 */
   updatedAt?: number;
