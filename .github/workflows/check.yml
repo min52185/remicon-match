@@ -1,0 +1,44 @@
+# 코드를 올릴 때마다 자동으로 검사한다.
+#
+# 조원 중 Git 을 아는 사람이 한 명뿐이라, 누가 무엇을 망가뜨렸는지 사람이 찾아내는
+# 방식으로는 오래 못 간다. 올리는 순간 GitHub 가 검사해서 빨간 X 를 띄워 주면,
+# 명령어를 몰라도 "내가 방금 올린 게 문제다" 를 바로 안다.
+#
+# 세 가지를 본다. 셋 다 로컬에서 돌리는 것과 같은 명령이다.
+#   타입 검사   말이 안 되는 코드 (없는 속성, 잘못된 타입)
+#   테스트      시방 규칙·AI 배분·납품서 계산이 여전히 맞는지
+#   빌드        배포될 수 있는 상태인지
+#
+# 키가 없어도 다 돌아간다. 검사에는 Supabase·카카오가 필요 없다.
+
+name: 검사
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # package-lock.json 그대로 설치한다 — 사람마다 다른 버전이 깔리면
+      # "내 컴퓨터에서는 되는데" 가 시작된다
+      - name: 패키지 설치
+        run: npm ci
+
+      - name: 타입 검사
+        run: npx tsc --noEmit
+
+      - name: 테스트
+        run: npm test
+
+      - name: 빌드
+        run: npm run build

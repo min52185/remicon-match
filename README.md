@@ -244,6 +244,8 @@ components/             KakaoMap · SpecPicker · 역할 껍데기 등
 supabase/migrations/    0001_init · 0002_seed · 0003_urgent · 0004_registration · 0005_photo_storage · 0006_driver_visible_to_site
 supabase/reset-rehearsal.sql  리허설 초기화 — 주문·배송만 비우고 공장·현장은 남긴다
 docs/시연-매뉴얼.md           세 사람이 각자 계정 하나씩 들고 따라 하는 설명서
+docs/협업-가이드.md           조원이 같이 코드를 고칠 때 보는 문서
+.github/workflows/check.yml  올릴 때마다 타입·테스트·빌드 자동 검사
 docs/prototype-a.html   기존 프로토타입 (참고용, 고치지 않음)
 tests/                  vitest
 ```
