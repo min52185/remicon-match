@@ -241,7 +241,7 @@ lib/
   ai/allocate.ts        배분 최적화
   ai/predict.ts         지연 예측 · 콜드조인트 경고
 components/             KakaoMap · SpecPicker · 역할 껍데기 등
-supabase/migrations/    0001_init ~ 0010_one_site_per_account — 새로 만들 때는 다음 번호로
+supabase/migrations/    0001_init ~ 0011_company_signup — 새로 만들 때는 다음 번호로
 supabase/reset-rehearsal.sql  리허설 초기화 — 주문·배송만 비우고 공장·현장은 남긴다
 docs/시연-매뉴얼.md           세 사람이 각자 계정 하나씩 들고 따라 하는 설명서
 docs/협업-가이드.md           조원이 같이 코드를 고칠 때 보는 문서

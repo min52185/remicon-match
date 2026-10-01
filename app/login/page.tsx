@@ -162,10 +162,13 @@ export default function LoginPage() {
  * ======================================================================== */
 
 function ChooseCompany() {
-  const { profile, setCompany, listCompanies, signOut, error } = useAuth();
+  const { profile, setCompany, createCompany, listCompanies, signOut, error } = useAuth();
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [picked, setPicked] = useState('');
   const [busy, setBusy] = useState(false);
+  /** 목록에 없는 회사를 직접 적는 중 */
+  const [making, setMaking] = useState(false);
+  const [newName, setNewName] = useState('');
 
   useEffect(() => {
     listCompanies().then(setCompanies);
@@ -185,11 +188,55 @@ function ChooseCompany() {
 
       {companies === null ? (
         <p className={s.muted}>회사 목록을 불러오는 중…</p>
-      ) : options.length === 0 ? (
-        <p className={s.error}>
-          {wanted} 목록이 비어 있습니다. Supabase SQL Editor 에서{' '}
-          <code>0002_seed.sql</code> 을 실행했는지 확인하세요.
-        </p>
+      ) : making || options.length === 0 ? (
+        <>
+          {options.length === 0 && (
+            <p className={s.muted}>
+              등록된 {wanted}가 없습니다. 아래에 회사 이름을 적으면 새로 만듭니다.
+            </p>
+          )}
+
+          <label className="field">
+            <span className="label">{wanted} 이름</span>
+            <input
+              className="input"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={wanted === '건설사' ? '예: 대진종합건설' : '예: 가온레미콘'}
+              autoComplete="organization"
+            />
+          </label>
+
+          {error && <p className={s.error}>{error}</p>}
+
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            disabled={newName.trim().length < 2 || busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await createCompany(newName.trim(), wanted);
+              } catch {
+                /* 메시지는 error 에 담겨 위에 뜬다 */
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? '만드는 중…' : `${wanted} 만들고 시작하기`}
+          </button>
+
+          {options.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-block"
+              onClick={() => setMaking(false)}
+            >
+              목록에서 고르기
+            </button>
+          )}
+        </>
       ) : (
         <>
           <label className="field">
@@ -220,6 +267,14 @@ function ChooseCompany() {
             }}
           >
             {busy ? '저장 중…' : '이 회사로 시작하기'}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-outline btn-block"
+            onClick={() => setMaking(true)}
+          >
+            목록에 없습니다 — 회사 새로 만들기
           </button>
         </>
       )}

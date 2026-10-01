@@ -66,6 +66,11 @@ interface AuthState {
   setSite(siteId: string): Promise<void>;
   /** 고를 수 있는 현장 — 내 건설사의 현장만 */
   listMySites(): Promise<SiteOption[]>;
+  /**
+   * 목록에 없는 회사를 직접 만든다 (가입할 때).
+   * 만든 회사를 그대로 내 소속으로 잡고 id 를 돌려준다.
+   */
+  createCompany(name: string, kind: Company['kind']): Promise<string>;
   /** 내 프로필 고치기 — 기사 연락처·얼굴 사진 */
   updateProfile(patch: Partial<Pick<Profile, 'name' | 'phone' | 'photoPath'>>): Promise<void>;
   listCompanies(): Promise<Company[]>;
@@ -257,6 +262,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [demoMode, user, loadProfile],
   );
 
+  /**
+   * 목록에 없는 회사를 만든다.
+   *
+   * 만들고 바로 내 소속으로 잡는다 — 만들어 놓고 다시 고르게 하면 그 사이에
+   * 다른 회사를 고를 수 있고, 주인 없는 회사 줄만 남는다.
+   * 이름이 겹치면 DB 가 막는다(0011 의 유일 인덱스). 그때는 이미 있는 회사이니
+   * 목록에서 고르라고 안내한다.
+   */
+  const createCompany = useCallback(
+    async (name: string, kind: Company['kind']): Promise<string> => {
+      const sb = getSupabase();
+      if (!sb || !user) throw new Error('로그인이 필요합니다.');
+
+      const { data, error: e } = await sb
+        .from('companies')
+        .insert({ name: name.trim(), kind })
+        .select('id')
+        .single<{ id: string }>();
+
+      if (e) {
+        const msg = e.code === '23505' ? '같은 이름의 회사가 이미 있습니다. 목록에서 고르세요.' : translate(e.message);
+        setError(msg);
+        throw new Error(msg);
+      }
+
+      await setCompany(data.id);
+      return data.id;
+    },
+    [user, setCompany],
+  );
+
   const listCompanies = useCallback(async (): Promise<Company[]> => {
     const sb = getSupabase();
     if (!sb) return [];
@@ -281,6 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCompany,
       setSite,
       listMySites,
+      createCompany,
       updateProfile,
       listCompanies,
     }),
@@ -296,6 +333,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCompany,
       setSite,
       listMySites,
+      createCompany,
       updateProfile,
       listCompanies,
     ],
