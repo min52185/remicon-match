@@ -11,6 +11,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
+import PlanAreaCalculator from '@/components/PlanAreaCalculator';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
 import UrgentRequest from '@/components/UrgentRequest';
@@ -312,6 +313,8 @@ function OrderBody({ site }: { site: Site }) {
 
       {/* 물량·시각 */}
       <Panel title="물량과 타설 시각">
+        <PlanAreaCalculator onApply={(v) => setVolumeM3(Math.max(1, v))} />
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
           <label className="field">
             <span className="label">총 물량 (m³)</span>
