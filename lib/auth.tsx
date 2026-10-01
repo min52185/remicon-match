@@ -24,6 +24,8 @@ export interface Profile {
   role: Role;
   companyId: string | null;
   phone: string | null;
+  /** 현장 계정이 맡은 현장 하나. 공장·기사 계정은 null 이다 */
+  siteId: string | null;
   /** 기사 얼굴 사진의 저장 경로. 사진 자체는 Storage 에 있다. */
   photoPath: string | null;
 }
@@ -32,6 +34,13 @@ export interface Company {
   id: string;
   name: string;
   kind: '건설사' | '레미콘사';
+}
+
+/** 현장 고르기 화면에 뜨는 한 줄 */
+export interface SiteOption {
+  id: string;
+  name: string;
+  address: string;
 }
 
 interface AuthState {
@@ -48,6 +57,15 @@ interface AuthState {
   signOut(): Promise<void>;
   /** 가입 직후 소속 고르기 */
   setCompany(companyId: string): Promise<void>;
+  /**
+   * 소속을 고른 뒤 아직 현장을 안 고른 현장 계정.
+   * 현장 계정은 현장 하나에 묶인다 — 남의 현장 자료를 볼 이유가 없다.
+   */
+  needsSite: boolean;
+  /** 내가 맡을 현장 정하기 (가입할 때, 그리고 나중에 옮길 때) */
+  setSite(siteId: string): Promise<void>;
+  /** 고를 수 있는 현장 — 내 건설사의 현장만 */
+  listMySites(): Promise<SiteOption[]>;
   /** 내 프로필 고치기 — 기사 연락처·얼굴 사진 */
   updateProfile(patch: Partial<Pick<Profile, 'name' | 'phone' | 'photoPath'>>): Promise<void>;
   listCompanies(): Promise<Company[]>;
@@ -61,6 +79,7 @@ const DEMO_PROFILE: Profile = {
   name: '시연 사용자',
   role: 'site',
   companyId: 'demo',
+  siteId: null,
   phone: null,
   photoPath: null,
 };
@@ -78,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!sb) return null;
     const { data, error: e } = await sb
       .from('profiles')
-      .select('id, name, role, company_id, phone, photo_path')
+      .select('id, name, role, company_id, site_id, phone, photo_path')
       .eq('id', uid)
       .maybeSingle<ProfileRow>();
     if (e) {
@@ -91,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name: data.name,
       role: data.role as Role,
       companyId: data.company_id,
+      siteId: data.site_id ?? null,
       phone: data.phone ?? null,
       photoPath: data.photo_path ?? null,
     };
@@ -178,6 +198,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   /**
+   * 내가 맡을 현장을 정한다.
+   *
+   * 옮기면 이전 현장의 주문·배송·납품서는 그 즉시 안 보인다. 화면에서 숨기는 것이
+   * 아니라 DB 권한(0010)이 profiles.site_id 로 판단하기 때문이다.
+   */
+  const setSite = useCallback(
+    async (siteId: string) => {
+      const sb = getSupabase();
+      if (!sb || !user) return;
+      const { error: e } = await sb.from('profiles').update({ site_id: siteId }).eq('id', user.id);
+      if (e) {
+        setError(translate(e.message));
+        throw e;
+      }
+      setProfile(await loadProfile(user.id));
+    },
+    [user, loadProfile],
+  );
+
+  /**
+   * 고를 수 있는 현장.
+   * 정책(0010)이 "현장 역할이면 내 건설사의 현장"까지만 돌려주므로,
+   * 여기서 회사를 따로 거르지 않아도 남의 회사 현장은 오지 않는다.
+   */
+  const listMySites = useCallback(async (): Promise<SiteOption[]> => {
+    const sb = getSupabase();
+    if (!sb) return [];
+    const { data } = await sb.from('sites').select('id, name, address').order('name');
+    return (data as SiteOption[]) ?? [];
+  }, []);
+
+  /**
    * 내 프로필 고치기.
    * 시연 모드에는 DB 가 없으므로 화면 상태만 바꾼다 — 사진은 브라우저에 남아 있다.
    */
@@ -219,11 +271,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       profile,
       needsCompany: !demoMode && !!profile && !profile.companyId,
+      // 소속을 고른 다음 단계다. 공장·기사는 현장에 묶이지 않는다
+      needsSite:
+        !demoMode && !!profile && profile.role === 'site' && !!profile.companyId && !profile.siteId,
       error,
       signIn,
       signUp,
       signOut,
       setCompany,
+      setSite,
+      listMySites,
       updateProfile,
       listCompanies,
     }),
@@ -237,6 +294,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signOut,
       setCompany,
+      setSite,
+      listMySites,
       updateProfile,
       listCompanies,
     ],

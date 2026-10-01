@@ -59,6 +59,24 @@
   color: var(--color-concrete-dark);
 }
 
+/*
+ * 고르는 칸이 아니라 "지금 이 현장" 표시.
+ * 현장 계정은 현장 하나에 묶여 바꿀 것이 없으므로, 드롭다운처럼 보이면 안 된다.
+ */
+.pickerFixed {
+  max-width: 190px;
+  padding: 7px 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sharp);
+  color: var(--color-concrete-dark);
+  background: var(--color-paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .main {
   flex: 1;
   padding-block: 18px 32px;
