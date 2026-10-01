@@ -94,3 +94,60 @@ export function decodePolyline(str: string, factor = 1e5): [number, number][] {
   }
   return pts;
 }
+
+/* ==========================================================================
+ * 경로 위의 한 점에서 갈라지는 것들 — 네비게이션 화면이 쓴다
+ * ======================================================================== */
+
+/**
+ * 경로를 진행률 f 에서 둘로 자른다.
+ * 네비처럼 "지나온 길은 흐리게, 남은 길은 진하게" 그리려면 두 선이 필요하다.
+ * 자른 지점은 양쪽에 모두 넣어 선이 끊겨 보이지 않게 한다.
+ */
+export function splitPath(
+  path: [number, number][],
+  f: number,
+): { done: [number, number][]; rest: [number, number][] } {
+  if (path.length < 2) return { done: [...path], rest: [...path] };
+  const cut = alongPath(path, f);
+  const p: [number, number] = [cut.lat, cut.lng];
+
+  // 자른 지점이 마침 꼭짓점이면(출발 직전·도착 직후) 같은 좌표를 두 번 넣지 않는다.
+  // 길이 1 짜리 선은 그릴 것이 없다는 뜻이고, 화면은 그 길이로 그릴지 말지를 정한다.
+  const head = path.slice(0, cut.index + 1);
+  const tail = path.slice(cut.index + 1);
+  const same = (a: [number, number], b: [number, number]) => a[0] === b[0] && a[1] === b[1];
+
+  return {
+    done: same(head[head.length - 1], p) ? head : [...head, p],
+    rest: tail.length > 0 && same(tail[0], p) ? tail : [p, ...tail],
+  };
+}
+
+/**
+ * 진행률 f 지점에서 차가 향하는 방향 (도, 북쪽 0, 시계 방향).
+ * 네비 화살표를 돌리는 데 쓴다. 경도 1도는 위도 1도보다 짧으므로 위도로 보정한다.
+ */
+export function headingAt(path: [number, number][], f: number): number {
+  if (path.length < 2) return 0;
+  const { index } = alongPath(path, f);
+  const [a1, o1] = path[index];
+  const [a2, o2] = path[Math.min(index + 1, path.length - 1)];
+  const dLat = a2 - a1;
+  const dLng = (o2 - o1) * Math.cos((a1 * Math.PI) / 180);
+  if (dLat === 0 && dLng === 0) return 0;
+  return (((Math.atan2(dLng, dLat) * 180) / Math.PI) + 360) % 360;
+}
+
+/** 진행률 f 지점부터 경로 끝까지 남은 거리(km) — 표시는 실제 거리라야 하므로 하버사인 */
+export function remainingKm(path: [number, number][], f: number): number {
+  const { rest } = splitPath(path, f);
+  let km = 0;
+  for (let i = 1; i < rest.length; i++) {
+    km += haversineKm(
+      { lat: rest[i - 1][0], lng: rest[i - 1][1] },
+      { lat: rest[i][0], lng: rest[i][1] },
+    );
+  }
+  return round1(km);
+}

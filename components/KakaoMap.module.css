@@ -48,3 +48,30 @@
   font-size: 0.85rem;
   color: var(--color-concrete-mid);
 }
+
+/*
+ * 카메라를 되돌리는 단추.
+ * 지도를 끌거나 확대하면 자동 맞춤을 멈추기 때문에, 전체를 다시 보거나
+ * 네비 따라가기를 되살릴 길이 하나는 있어야 한다.
+ */
+.camBtn {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 6;
+  padding: 6px 11px;
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-concrete-dark);
+  background: rgba(250, 250, 248, 0.94);
+  border: 1px solid var(--color-concrete-dark);
+  border-radius: var(--radius-sharp);
+  box-shadow: 0 1px 4px rgba(46, 46, 44, 0.25);
+  cursor: pointer;
+}
+
+.camBtn:hover {
+  border-color: var(--color-rust);
+  color: var(--color-rust);
+}

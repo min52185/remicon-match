@@ -9,7 +9,7 @@
  * 차마다 결정적 난수로 속도 곡선을 만들어, 어떤 차는 늦고 어떤 차는 일찍 오게 한다.
  */
 
-import { alongPath, clamp, hash01 } from '../geo';
+import { alongPath, clamp, hash01, headingAt } from '../geo';
 import { MIN } from '../rules';
 import type { Delivery, TruckLocation } from '../types';
 
@@ -22,6 +22,8 @@ export interface Position {
   etaAt: number;
   at: number;
   source: 'gps' | 'sim';
+  /** 진행 방향 (도, 북 0) — 네비 화살표에 쓴다 */
+  heading?: number;
   /** 최근 속도 km/h (있을 때) */
   speedKmh?: number;
 }
@@ -114,7 +116,15 @@ export function simulatedPosition(d: Delivery, now: number): Position {
   }
 
   const at = alongPath(d.path, progress);
-  return { lat: at.lat, lng: at.lng, progress, etaAt, at: now, source: 'sim' };
+  return {
+    lat: at.lat,
+    lng: at.lng,
+    progress,
+    etaAt,
+    at: now,
+    source: 'sim',
+    heading: headingAt(d.path, progress),
+  };
 }
 
 /**
@@ -145,6 +155,8 @@ export function positionFromGps(
     etaAt: Math.max(now, last.recordedAt + remainMin * MIN),
     at: last.recordedAt,
     source: 'gps',
+    // GPS 가 방향을 못 줄 때가 많다 (정지 중이거나 실내). 그때는 경로에서 뽑는다
+    heading: last.heading ?? headingAt(d.path, progress),
     speedKmh: last.speedKmh,
   };
 }

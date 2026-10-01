@@ -14,6 +14,7 @@ import { SiteShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { analyzeDelay, monitorPour, recommend } from '@/lib/ai/predict';
 import { clock, delayText, duration, limitRemaining, m3, remaining } from '@/lib/format';
+import { splitPath } from '@/lib/geo';
 import { DeliveryRules, MIN, PHASE_LABEL, PHASE_TONE, specText } from '@/lib/rules';
 import { photoUrl } from '@/lib/services/photos';
 import { getPosition, type Position } from '@/lib/services/tracking';
@@ -92,13 +93,21 @@ function TrackingBody({ site }: { site: Site }) {
           kind: 'truck' as const,
           label: `${truck?.no ?? '?'}호차 ${clock(t.d.etaCurrentAt)}`,
           tone: delay.level,
+          heading: t.pos.heading,
         };
       }),
   ];
 
   const paths: MapPath[] = tracked
     .filter((t) => !t.d.completedAt)
-    .map((t) => ({ id: t.d.id, points: t.d.path, emphasis: true }));
+    .flatMap((t) => {
+      // 지나온 길은 회색, 남은 길은 진한 색 — 진행이 마커 말고 선으로도 보이게
+      const { done, rest } = splitPath(t.d.path, t.pos.progress);
+      return [
+        ...(done.length > 1 ? [{ id: `${t.d.id}-done`, points: done, dim: true }] : []),
+        ...(rest.length > 1 ? [{ id: `${t.d.id}-rest`, points: rest, emphasis: true }] : []),
+      ];
+    });
 
   if (!mounted) return <Empty>불러오는 중…</Empty>;
 

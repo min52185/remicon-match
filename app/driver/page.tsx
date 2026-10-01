@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import KakaoMap, { type MapMarker, type MapPath } from '@/components/KakaoMap';
+import Nav from './Nav';
 import PhotoInput from '@/components/PhotoInput';
 import { DriverShell } from '@/components/RoleShells';
 import { Alert, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
@@ -465,56 +465,16 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
         </div>
       )}
 
-      {/* 현장 위치와 추천 경로 — 기사가 가장 먼저 보는 것 */}
+      {/* 네비게이션 — 기사가 가장 먼저 보는 것 */}
       {site && (
-        <div style={{ marginBottom: 12 }}>
-          <KakaoMap
-            markers={[
-              ...(plant
-                ? [
-                    {
-                      id: plant.id,
-                      lat: plant.lat,
-                      lng: plant.lng,
-                      kind: 'plant' as const,
-                      label: plant.name,
-                      tone: 'muted' as const,
-                    },
-                  ]
-                : []),
-              {
-                id: site.id,
-                lat: site.lat,
-                lng: site.lng,
-                kind: 'site' as const,
-                label: site.name,
-                tone: 'accent' as const,
-              },
-              ...(phase === 'transit' || phase === 'loading'
-                ? [
-                    {
-                      id: delivery.id,
-                      lat: pos.lat,
-                      lng: pos.lng,
-                      kind: 'truck' as const,
-                      label: `내 차 ${clock(delivery.etaCurrentAt)}`,
-                      tone: 'ok' as const,
-                      selected: true,
-                    } satisfies MapMarker,
-                  ]
-                : []),
-            ]}
-            paths={
-              delivery.path.length > 1
-                ? ([{ id: delivery.id, points: delivery.path, emphasis: true }] satisfies MapPath[])
-                : []
-            }
-            height={220}
-          />
-          <p style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)', margin: '6px 0 0' }}>
-            추천 경로입니다. 현장 상황에 따라 기사 판단이 우선합니다.
-          </p>
-        </div>
+        <Nav
+          delivery={delivery}
+          pos={pos}
+          site={site}
+          plant={plant}
+          now={now}
+          driving={tracking || phase === 'transit'}
+        />
       )}
 
       {/* 현장 도착 대기 — 가서 바로 부을 수 있나 */}
