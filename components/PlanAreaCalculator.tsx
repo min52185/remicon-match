@@ -95,19 +95,16 @@ function rotateCanvas90(src: HTMLCanvasElement, clockwise: boolean): HTMLCanvasE
   return out;
 }
 
-async function ocrCanvasForNumbers(canvas: HTMLCanvasElement): Promise<number[]> {
-  const worker = await window.Tesseract!.createWorker('eng');
-  await worker.setParameters({ tessedit_char_whitelist: '0123456789xX*,. ' });
+async function ocrCanvasForNumbers(worker: TesseractWorker, canvas: HTMLCanvasElement): Promise<number[]> {
   const res = await worker.recognize(canvas.toDataURL());
-  await worker.terminate();
   const text = res?.data?.text || '';
   const cleaned = text.replace(/(\d)[,.](?=\d)/g, '$1');
   const matches = cleaned.match(/\d{2,6}/g) || [];
   return matches.map((v) => parseInt(v, 10)).filter((v) => v >= 10);
 }
 
-/** variants 를 순서대로 시도하다가 숫자를 찾으면 멈춘다 */
-async function runOcrVariants(cropped: HTMLCanvasElement, variants: string[]): Promise<number[]> {
+/** variants 를 순서대로 시도하다가 숫자를 찾으면 멈춘다 (워커는 호출하는 쪽에서 재사용) */
+async function runOcrVariants(worker: TesseractWorker, cropped: HTMLCanvasElement, variants: string[]): Promise<number[]> {
   for (let i = 0; i < variants.length; i++) {
     const canvas =
       variants[i] === 'cw'
@@ -116,13 +113,37 @@ async function runOcrVariants(cropped: HTMLCanvasElement, variants: string[]): P
           ? rotateCanvas90(cropped, false)
           : cropped;
     try {
-      const nums = await ocrCanvasForNumbers(canvas);
+      const nums = await ocrCanvasForNumbers(worker, canvas);
       if (nums.length || i === variants.length - 1) return nums;
     } catch {
       if (i === variants.length - 1) return [];
     }
   }
   return [];
+}
+
+/** 실제 도면은 치수 숫자 바로 옆에 그리드 기호·인출선이 붙어 있어서, 손으로 그린 박스에
+ * 그런 노이즈가 살짝만 섞여도 OCR 이 통째로 실패한다. 원본 박스가 실패하면, 노이즈가
+ * 보통 붙어 있는 짧은 쪽 가장자리를 깎아 낸 하위 영역들을 순서대로 다시 시도한다. */
+function candidateBoxes(box: Box): Box[] {
+  const x0 = Math.min(box.x0, box.x1);
+  const x1 = Math.max(box.x0, box.x1);
+  const y0 = Math.min(box.y0, box.y1);
+  const y1 = Math.max(box.y0, box.y1);
+  const w = x1 - x0;
+  const h = y1 - y0;
+  const windows: Box[] = [box];
+  const winFrac = 0.55;
+  for (const startFrac of [0, 0.15, 0.3, 0.45]) {
+    if (h <= w) {
+      // 가로로 넓은 박스 — 노이즈는 보통 위/아래에 붙어 있다
+      windows.push({ x0, y0: y0 + h * startFrac, x1, y1: y0 + h * Math.min(1, startFrac + winFrac) });
+    } else {
+      // 세로로 긴 박스 — 노이즈는 보통 좌/우에 붙어 있다
+      windows.push({ x0: x0 + w * startFrac, y0, x1: x0 + w * Math.min(1, startFrac + winFrac), y1 });
+    }
+  }
+  return windows;
 }
 
 function sumLabel(list: number[]): { total: number; label: string } | null {
@@ -285,9 +306,16 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
       setBusy(false);
       return;
     }
-    const cropped = cropBoxToCanvas(img, box, dispScaleRef.current, natSizeRef.current.w, natSizeRef.current.h);
+    const worker = await window.Tesseract!.createWorker('eng');
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789xX*,. ' });
     const variants = field === 'h' ? ['cw', 'ccw', 'plain'] : ['plain'];
-    const nums = await runOcrVariants(cropped, variants);
+    let nums: number[] = [];
+    for (const cand of candidateBoxes(box)) {
+      const cropped = cropBoxToCanvas(img, cand, dispScaleRef.current, natSizeRef.current.w, natSizeRef.current.h);
+      nums = await runOcrVariants(worker, cropped, variants);
+      if (nums.length) break;
+    }
+    await worker.terminate();
     setBusy(false);
     const s = sumLabel(nums);
     if (s) {
