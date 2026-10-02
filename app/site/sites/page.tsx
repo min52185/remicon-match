@@ -80,6 +80,7 @@ function SitesBody({ current }: { current: Site }) {
                   </span>
                 </Row>
                 {s.accessNote && <Row label="진입 메모">{s.accessNote}</Row>}
+                {!demoMode && s.id !== current.id && <MoveHere site={s} />}
               </article>
             ))}
           </div>
@@ -103,11 +104,79 @@ function SitesBody({ current }: { current: Site }) {
 }
 
 /* ==========================================================================
+ * 현장 옮기기
+ *
+ * 한 번 더 묻는다. 옮기면 이전 현장의 주문·배송·납품서가 그 자리에서 사라진다.
+ * 화면에서 숨기는 것이 아니라 DB 권한(0010)이 내 현장만 돌려주기 때문이다.
+ * ======================================================================== */
+
+function MoveHere({ site }: { site: Site }) {
+  const { setSite } = useAuth();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        className="btn btn-outline btn-sm btn-block"
+        style={{ marginTop: 10 }}
+        onClick={() => setAsking(true)}
+      >
+        이 현장으로 옮기기
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <Alert tone="warn" title={`${site.name} 으로 옮길까요?`}>
+        옮기면 지금 현장의 주문·배송·납품서는 더 이상 보이지 않습니다. 자료가 지워지는 것은
+        아니고, 그 현장을 맡은 계정에게만 보입니다.
+      </Alert>
+      {error && (
+        <p style={{ color: 'var(--color-bad)', fontSize: '0.84rem', margin: '8px 0 0' }}>{error}</p>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          style={{ flex: 1 }}
+          disabled={busy}
+          onClick={async () => {
+            if (busyRef.current) return;
+            busyRef.current = true;
+            setBusy(true);
+            setError(null);
+            try {
+              await setSite(site.id);
+              window.location.reload();
+            } catch (e) {
+              setError(failure(e, '현장을 옮기지 못했습니다.'));
+            } finally {
+              busyRef.current = false;
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? '옮기는 중…' : '옮기기'}
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAsking(false)}>
+          그대로 두기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================================
  * 현장 등록
  * ======================================================================== */
 
 function NewSiteForm({ onDone, first }: { onDone: () => void; first?: boolean }) {
-  const { demoMode, profile } = useAuth();
+  const { demoMode, profile, setSite } = useAuth();
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
   const [where, setWhere] = useState<PickedLocation | null>(null);
@@ -136,13 +205,16 @@ function NewSiteForm({ onDone, first }: { onDone: () => void; first?: boolean })
     setSaving(true);
     setError(null);
     try {
-      await createSite({
+      const id = await createSite({
         name: name.trim(),
         address: effectiveAddress.trim(),
         lat: where.lat,
         lng: where.lng,
         accessNote: note.trim() || undefined,
       });
+      // 맡은 현장이 아직 없으면 방금 만든 곳을 맡는다. 이미 있으면 건드리지 않는다 —
+      // 현장을 옮기는 것은 자료가 통째로 바뀌는 일이라 사람이 눌러야 한다.
+      if (!demoMode && !profile?.siteId) await setSite(id);
       onDone();
     } catch (e) {
       setError(failure(e, '현장을 등록하지 못했습니다.'));

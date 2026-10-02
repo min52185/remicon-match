@@ -10,13 +10,13 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useAuth, type Company } from '@/lib/auth';
+import { useAuth, type Company, type SiteOption } from '@/lib/auth';
 import { HOME_BY_ROLE, ROLE_DESC, ROLE_LABEL } from '@/lib/routes';
 import type { Role } from '@/lib/types';
 import s from './login.module.css';
 
 export default function LoginPage() {
-  const { demoMode, loading, profile, needsCompany, error, signIn, signUp } = useAuth();
+  const { demoMode, loading, profile, needsCompany, needsSite, error, signIn, signUp } = useAuth();
   const router = useRouter();
 
   const [mode, setMode] = useState<'in' | 'up'>('in');
@@ -29,12 +29,13 @@ export default function LoginPage() {
 
   // 이미 로그인돼 있고 소속까지 정해졌으면 역할 홈으로 보낸다
   useEffect(() => {
-    if (!loading && profile && !needsCompany) router.replace(HOME_BY_ROLE[profile.role]);
-  }, [loading, profile, needsCompany, router]);
+    if (!loading && profile && !needsCompany && !needsSite) router.replace(HOME_BY_ROLE[profile.role]);
+  }, [loading, profile, needsCompany, needsSite, router]);
 
   if (demoMode) return <DemoNotice />;
   if (loading) return <Shell><p className={s.muted}>불러오는 중…</p></Shell>;
   if (profile && needsCompany) return <ChooseCompany />;
+  if (profile && needsSite) return <ChooseSite />;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -161,10 +162,13 @@ export default function LoginPage() {
  * ======================================================================== */
 
 function ChooseCompany() {
-  const { profile, setCompany, listCompanies, signOut, error } = useAuth();
+  const { profile, setCompany, createCompany, listCompanies, signOut, error } = useAuth();
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [picked, setPicked] = useState('');
   const [busy, setBusy] = useState(false);
+  /** 목록에 없는 회사를 직접 적는 중 */
+  const [making, setMaking] = useState(false);
+  const [newName, setNewName] = useState('');
 
   useEffect(() => {
     listCompanies().then(setCompanies);
@@ -184,11 +188,55 @@ function ChooseCompany() {
 
       {companies === null ? (
         <p className={s.muted}>회사 목록을 불러오는 중…</p>
-      ) : options.length === 0 ? (
-        <p className={s.error}>
-          {wanted} 목록이 비어 있습니다. Supabase SQL Editor 에서{' '}
-          <code>0002_seed.sql</code> 을 실행했는지 확인하세요.
-        </p>
+      ) : making || options.length === 0 ? (
+        <>
+          {options.length === 0 && (
+            <p className={s.muted}>
+              등록된 {wanted}가 없습니다. 아래에 회사 이름을 적으면 새로 만듭니다.
+            </p>
+          )}
+
+          <label className="field">
+            <span className="label">{wanted} 이름</span>
+            <input
+              className="input"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={wanted === '건설사' ? '예: 대진종합건설' : '예: 가온레미콘'}
+              autoComplete="organization"
+            />
+          </label>
+
+          {error && <p className={s.error}>{error}</p>}
+
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            disabled={newName.trim().length < 2 || busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await createCompany(newName.trim(), wanted);
+              } catch {
+                /* 메시지는 error 에 담겨 위에 뜬다 */
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? '만드는 중…' : `${wanted} 만들고 시작하기`}
+          </button>
+
+          {options.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-block"
+              onClick={() => setMaking(false)}
+            >
+              목록에서 고르기
+            </button>
+          )}
+        </>
       ) : (
         <>
           <label className="field">
@@ -220,8 +268,92 @@ function ChooseCompany() {
           >
             {busy ? '저장 중…' : '이 회사로 시작하기'}
           </button>
+
+          <button
+            type="button"
+            className="btn btn-outline btn-block"
+            onClick={() => setMaking(true)}
+          >
+            목록에 없습니다 — 회사 새로 만들기
+          </button>
         </>
       )}
+
+      <button type="button" className="btn btn-ghost btn-block" onClick={() => void signOut()}>
+        다른 계정으로 로그인
+      </button>
+    </Shell>
+  );
+}
+
+/* ==========================================================================
+ * 현장 고르기 — 현장 계정만, 소속을 고른 다음
+ *
+ * 현장 계정은 현장 하나에 묶인다. 다른 현장의 주문·배송·납품서는 화면에서
+ * 숨기는 것이 아니라, DB 권한(0010)이 아예 돌려주지 않는다.
+ * ======================================================================== */
+
+function ChooseSite() {
+  const { profile, setSite, listMySites, signOut, error } = useAuth();
+  const [sites, setSites] = useState<SiteOption[] | null>(null);
+  const [picked, setPicked] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void listMySites().then(setSites);
+  }, [listMySites]);
+
+  return (
+    <Shell>
+      <h1 className={s.title}>맡으신 현장을 골라 주세요</h1>
+      <p className={s.muted}>
+        {profile?.name}님은 고른 <strong>현장 하나</strong>만 보게 됩니다. 다른 현장의 주문·배송·
+        납품서는 보이지 않습니다. 나중에 <strong>현장</strong> 화면에서 옮길 수 있습니다.
+      </p>
+
+      {sites === null ? (
+        <p className={s.muted}>현장 목록을 불러오는 중…</p>
+      ) : sites.length === 0 ? (
+        <p className={s.muted}>
+          우리 회사에 등록된 현장이 아직 없습니다. 먼저 현장을 하나 만들어야 시작할 수 있습니다.
+        </p>
+      ) : (
+        <>
+          <label className="field">
+            <span className="label">현장</span>
+            <select className="select" value={picked} onChange={(e) => setPicked(e.target.value)}>
+              <option value="">고르세요</option>
+              {sites.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name} · {x.address}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {error && <p className={s.error}>{error}</p>}
+
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            disabled={!picked || busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await setSite(picked);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? '저장 중…' : '이 현장으로 시작하기'}
+          </button>
+        </>
+      )}
+
+      <Link href="/site/sites" className="btn btn-outline btn-block">
+        현장 새로 등록하기
+      </Link>
 
       <button type="button" className="btn btn-ghost btn-block" onClick={() => void signOut()}>
         다른 계정으로 로그인

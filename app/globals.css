@@ -429,6 +429,29 @@
   border-width: 2px;
 }
 
+/*
+ * 네비게이션 화살표.
+ * heading 을 주면 점이 진행 방향을 가리키는 삼각형이 된다 — 차가 어느 쪽으로
+ * 가고 있는지는 위치만큼 중요하다. 방향은 인라인 --rmc-heading 으로 들어온다.
+ */
+.rmc-marker[data-heading='1'] .dot {
+  width: 0;
+  height: 0;
+  background: none;
+  border-radius: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 10px solid var(--color-paper);
+  transform: rotate(var(--rmc-heading, 0deg));
+  transition: transform 0.6s ease-out;
+}
+
+.rmc-marker[data-kind='truck'][data-heading='1'] {
+  /* 운행 중인 내 차는 한눈에 찾혀야 한다 */
+  border-color: var(--color-rust);
+  border-width: 2px;
+}
+
 /* ============================================================
    인쇄 — 납품서만 남기고 화면 장치는 뺀다.
    요소 이름(header·nav·button)으로 숨기면 패널 제목까지 사라지므로,

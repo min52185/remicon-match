@@ -12,7 +12,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import AppShell from './AppShell';
 import {
   IconDoc,
@@ -116,13 +116,21 @@ export function SiteShell({ title, description, showClock, children, empty }: Sh
   const db = useDb();
   const { demoMode, profile, pending, wrongRole } = useGate('site');
 
-  // 내 회사의 현장만
+  /**
+   * 현장 계정은 현장 하나에 묶인다 (0010). 그래서 고를 것이 없고, 고르는 칸도 없다.
+   * 옮기려면 "현장" 화면에서 바꾼다 — 바꾸면 이전 현장 자료는 그 즉시 안 보인다.
+   *
+   * 시연 모드만 예외다. 계정이 없어 묶을 데가 없고, 발표 때 세 역할을 한 브라우저로
+   * 오가며 보여 줘야 해서 고르는 칸을 남긴다.
+   */
   const mine = demoMode
     ? db.sites
     : db.sites.filter((x) => !x.companyId || x.companyId === profile?.companyId);
 
-  const [siteId, setSiteId] = useSelection('site', mine[0]?.id ?? '');
-  const site = mine.find((x) => x.id === siteId) ?? mine[0];
+  const [demoSiteId, setDemoSiteId] = useSelection('site', mine[0]?.id ?? '');
+  const site = demoMode
+    ? (mine.find((x) => x.id === demoSiteId) ?? mine[0])
+    : db.sites.find((x) => x.id === profile?.siteId);
 
   const pendingOrders = db.orders.filter(
     (o) => o.siteId === site?.id && (o.status === 'requested' || o.status === 'accepted'),
@@ -151,23 +159,34 @@ export function SiteShell({ title, description, showClock, children, empty }: Sh
       picker={
         <>
           <AccountChip />
-          <select
-            className={s.picker}
-            value={site?.id ?? ''}
-            onChange={(e) => setSiteId(e.target.value)}
-            aria-label="현장 고르기"
-          >
-            {mine.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-          </select>
+          {demoMode ? (
+            <select
+              className={s.picker}
+              value={site?.id ?? ''}
+              onChange={(e) => setDemoSiteId(e.target.value)}
+              aria-label="현장 고르기 (시연 모드)"
+            >
+              {mine.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            site && (
+              <span className={s.pickerFixed} title="이 계정이 맡은 현장입니다">
+                {site.name}
+              </span>
+            )
+          )}
         </>
       }
     >
       {site ? (
         children(site)
+      ) : !demoMode && mine.length > 0 ? (
+        // 회사에 현장은 있는데 아직 안 골랐다. 등록하라고 하면 엉뚱한 현장이 하나 더 생긴다
+        <PickSite options={mine} />
       ) : empty ? (
         empty()
       ) : (
@@ -182,6 +201,65 @@ export function SiteShell({ title, description, showClock, children, empty }: Sh
         />
       )}
     </AppShell>
+  );
+}
+
+/**
+ * 맡은 현장을 아직 안 고른 현장 계정.
+ *
+ * 로그인 화면에도 같은 단계가 있지만, 주소를 바로 치고 들어오면 그 단계를 건너뛴다.
+ * 그때 "현장을 등록하세요" 를 띄우면 이미 있는 현장 옆에 똑같은 현장이 하나 더 생긴다.
+ */
+function PickSite({ options }: { options: Site[] }) {
+  const { setSite } = useAuth();
+  const [picked, setPicked] = useState('');
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+
+  return (
+    <Panel title="맡으신 현장을 골라 주세요">
+      <p style={{ fontSize: '0.9rem', margin: '0 0 14px', lineHeight: 1.65 }}>
+        현장 계정은 <strong>현장 하나</strong>만 봅니다. 고른 현장의 주문·배송·납품서만 보이고,
+        다른 현장 것은 보이지 않습니다.
+      </p>
+
+      <label className="field">
+        <span className="label">현장</span>
+        <select className="select" value={picked} onChange={(e) => setPicked(e.target.value)}>
+          <option value="">고르세요</option>
+          {options.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+              {x.address ? ` · ${x.address}` : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <button
+        type="button"
+        className="btn btn-primary btn-block"
+        disabled={!picked || busy}
+        onClick={async () => {
+          if (busyRef.current) return;
+          busyRef.current = true;
+          setBusy(true);
+          try {
+            await setSite(picked);
+            window.location.reload();
+          } finally {
+            busyRef.current = false;
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? '저장 중…' : '이 현장으로 시작하기'}
+      </button>
+
+      <Link href="/site/sites" className="btn btn-outline btn-block" style={{ marginTop: 8 }}>
+        목록에 없습니다 — 새로 등록하기
+      </Link>
+    </Panel>
   );
 }
 

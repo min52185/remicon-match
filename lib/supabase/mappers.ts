@@ -165,6 +165,8 @@ export interface ProfileRow {
   phone: string | null;
   /** 기사 얼굴 사진의 Storage 경로 */
   photo_path: string | null;
+  /** 현장 계정이 맡은 현장. 공장·기사 계정은 비어 있다 */
+  site_id?: string | null;
 }
 
 /* ==========================================================================
