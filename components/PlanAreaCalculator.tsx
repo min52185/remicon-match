@@ -26,7 +26,7 @@ interface TesseractWorker {
   terminate: () => Promise<void>;
 }
 
-const MAX_W = 340;
+const DEFAULT_MAX_W = 340;
 const THICKNESS_OPTIONS = [100, 120, 150, 180, 200];
 const MARGIN_OPTIONS = [3, 5, 8, 10];
 
@@ -132,6 +132,7 @@ function sumLabel(list: number[]): { total: number; label: string } | null {
 }
 
 export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: number) => void }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const natSizeRef = useRef({ w: 0, h: 0 });
@@ -194,7 +195,10 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
       img.onload = () => {
         imgRef.current = img;
         natSizeRef.current = { w: img.naturalWidth, h: img.naturalHeight };
-        dispScaleRef.current = Math.min(1, MAX_W / img.naturalWidth);
+        // 패널 실제 폭에 맞춰 최대한 크게 — 도면 글씨가 작으면 드래그로 정확히 집기 어렵다
+        const avail = rootRef.current ? rootRef.current.clientWidth - 24 : DEFAULT_MAX_W;
+        const maxW = Math.max(240, avail);
+        dispScaleRef.current = Math.min(1, maxW / img.naturalWidth);
         resetBox();
         setHasImage(true);
         setImgVersion((v) => v + 1);
@@ -217,8 +221,12 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
   }, [hasImage, imgVersion]);
 
   function canvasPos(e: ReactMouseEvent<HTMLCanvasElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    // 좁은 화면에서 CSS maxWidth:100% 로 눌려 보일 때도 실제 캔버스 좌표로 정확히 맞춘다
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
   }
 
   function onMouseDown(e: ReactMouseEvent<HTMLCanvasElement>) {
@@ -308,6 +316,7 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
 
   return (
     <div
+      ref={rootRef}
       style={{
         marginBottom: 14,
         padding: 12,
@@ -349,12 +358,13 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
       {hasImage && (
         <div
           style={{
+            display: 'inline-block',
+            maxWidth: '100%',
             position: 'relative',
             border: '1px solid var(--color-line-strong)',
             borderRadius: 'var(--radius-sharp)',
             background: 'var(--color-paper)',
             marginBottom: 8,
-            overflow: 'auto',
           }}
         >
           <canvas
