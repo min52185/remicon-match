@@ -133,6 +133,7 @@ function sumLabel(list: number[]): { total: number; label: string } | null {
 
 export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const natSizeRef = useRef({ w: 0, h: 0 });
   const dispScaleRef = useRef(1);
@@ -202,6 +203,8 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
       img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);
+    // 값을 비워 두지 않으면 같은 파일을 다시 골랐을 때 onChange 가 안 뜬다
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   // 캔버스는 hasImage 가 true 가 돼야 DOM 에 생긴다 — 커밋된 뒤(페인트 전)에 크기를 잡고 그린다
@@ -321,8 +324,18 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
         도면 이미지를 올리면 면적을 인식해서 필요한 물량까지 한 번에 계산해요.
       </p>
 
+      {/* 업로드 칸이 사라진 뒤에도 '다른 도면 선택'으로 다시 열 수 있게 input 은 항상 둔다 */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => onPickFile(e.target.files?.[0])}
+      />
+
       {!hasImage && (
         <label
+          onClick={() => fileRef.current?.click()}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -337,7 +350,6 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
             cursor: 'pointer',
           }}
         >
-          <input type="file" accept="image/*" hidden onChange={(e) => onPickFile(e.target.files?.[0])} />
           <span style={{ fontSize: 24 }}>📐</span>
           <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>도면 이미지 업로드</span>
           <span style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)' }}>
@@ -364,6 +376,19 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
             onMouseMove={onMouseMove}
             onMouseUp={() => void onMouseUp()}
           />
+        </div>
+      )}
+
+      {hasImage && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+          >
+            다른 도면 선택
+          </button>
         </div>
       )}
 
