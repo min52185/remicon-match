@@ -13,7 +13,6 @@ const PROCESS = [
     body: '300m³를 한 공장이 다 대지 못할 때, 거리·이동시간·시간당 출하 능력을 함께 풀어 공장별 대수와 출하 시각표를 냅니다. 가까운 곳부터 채우면 중간에 끊깁니다.',
   },
   { media: '/assets/img/process-truck.png', alt: '현장에 도착한 레미콘 믹서 트럭' },
-  { media: '/assets/img/process-cure.png', alt: '물이 고인 원형 콘크리트 표면, 양생 중인 모습' },
   {
     index: '03 · 추적',
     title: '지금 어디까지 왔는지',
@@ -24,6 +23,7 @@ const PROCESS = [
     title: '끊기기 전에 알립니다',
     body: '지금 타설 중인 차가 끝나는 시각과 다음 차 도착 예상 사이의 공백을 계산합니다. 이어치기 허용 시간간격에 가까워지면 경고하고, 무엇을 해야 하는지 같이 내놓습니다.',
   },
+  { media: '/assets/img/process-cure.png', alt: '물이 고인 원형 콘크리트 표면, 양생 중인 모습' },
 ];
 
 const WHY = [
