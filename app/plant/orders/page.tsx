@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { PlantShell } from '@/components/RoleShells';
+import TempNow from '@/components/TempNow';
 import { Alert, Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { clock, dateClock, duration, m3 } from '@/lib/format';
 import {
@@ -194,6 +195,13 @@ function PendingCard({ order, plant }: { order: Order; plant: Plant }) {
       </Row>
       <Row label="허용 이동시간">
         {allowedMin}분 (외기 {order.tempC}℃ · 제한 {PourRules.limitMinutes(order.tempC)}분)
+      </Row>
+      {/*
+        위 숫자는 현장이 주문할 때의 기온으로 굳은 값이다. 수락은 지금 하므로,
+        그 사이 25℃ 를 넘나들었으면 받아들이기 전에 알아야 한다.
+      */}
+      <Row label="현장 기온">
+        <TempNow at={site} recordedC={order.tempC} bare />
       </Row>
 
       {roundsInfo && (

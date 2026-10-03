@@ -94,7 +94,25 @@ export function approximateTemperature(at: LatLng, when: number): Temperature {
   return { tempC, at: when, source: 'approx' };
 }
 
+/**
+ * 같은 지점·같은 시각대는 잠깐 재사용한다.
+ * 한 화면에 배송 카드가 여러 장이면 그만큼 /api/weather 를 두드리게 되는데,
+ * 기상청 예보는 1시간 단위라 그럴 이유가 없다.
+ */
+const cache = new Map<string, { at: number; value: Temperature }>();
+const CACHE_MS = 5 * 60_000;
+
 export async function getTemperature(at: LatLng, when: number = Date.now()): Promise<Temperature> {
+  const key = `${at.lat.toFixed(3)},${at.lng.toFixed(3)}@${kstYmd(when)}${kstParts(when).hour}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+
+  const value = await fetchTemperature(at, when);
+  cache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+async function fetchTemperature(at: LatLng, when: number): Promise<Temperature> {
   try {
     const params = new URLSearchParams({
       lat: String(at.lat),

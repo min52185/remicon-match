@@ -11,6 +11,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
+import TempNow from '@/components/TempNow';
 import PlanAreaCalculator from '@/components/PlanAreaCalculator';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
@@ -362,6 +363,14 @@ function OrderBody({ site }: { site: Site }) {
                 setTempC(Number(e.target.value));
               }}
             />
+            {/*
+              이 칸은 "타설 시각"의 예보다. 몇 시간 뒤를 보는 값이라 지금 창밖과
+              다를 수 있고, 그게 맞다. 다만 사람이 보기엔 헷갈리므로 지금 기온을
+              옆에 적어 둔다 — 비교 대상이 있어야 예보를 믿거나 고칠 수 있다.
+            */}
+            <span style={{ fontSize: '0.78rem', marginTop: 6, display: 'block' }}>
+              <TempNow at={site} />
+            </span>
           </label>
         </div>
 

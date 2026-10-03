@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState, useRef } from 'react';
+import TempNow from '@/components/TempNow';
 import { PlantShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { clock, duration, failure, m3, remaining } from '@/lib/format';
@@ -155,6 +156,13 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
       <Row label="제한시간">
         {order.tempC}℃ · 비비기~타설 완료{' '}
         {order.tempC >= RULES.HOT_THRESHOLD_C ? RULES.LIMIT_HOT_MIN : RULES.LIMIT_NORMAL_MIN}분
+      </Row>
+      {/*
+        출하 지시를 누르는 순간이 비비기 시작이고, 제한시간은 거기서부터 흐른다.
+        주문 때 기온으로 굳은 제한이 지금도 맞는지는 여기서 봐야 한다.
+      */}
+      <Row label="현장 기온">
+        <TempNow at={site} recordedC={order.tempC} bare />
       </Row>
 
       {/* AI 시각표 */}

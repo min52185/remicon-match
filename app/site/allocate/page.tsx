@@ -13,6 +13,7 @@
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
+import TempNow from '@/components/TempNow';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
 import { Alert, Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
@@ -274,6 +275,10 @@ function AllocateBody({ site }: { site: Site }) {
               value={tempC}
               onChange={(e) => setTempC(Number(e.target.value))}
             />
+            {/* 칸의 값은 타설 시각 예보다. 지금 기온을 옆에 둬야 고칠지 말지 판단한다 */}
+            <span style={{ fontSize: '0.78rem', marginTop: 6, display: 'block' }}>
+              <TempNow at={site} />
+            </span>
           </label>
           <label className="field">
             <span className="label">안전 여유 (분)</span>

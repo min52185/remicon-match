@@ -10,6 +10,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import KakaoMap, { type MapMarker, type MapPath } from '@/components/KakaoMap';
+import TempNow from '@/components/TempNow';
 import { SiteShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { analyzeDelay, monitorPour, recommend } from '@/lib/ai/predict';
@@ -191,6 +192,21 @@ function TrackingBody({ site }: { site: Site }) {
             </span>
           </Row>
         )}
+
+        {/*
+          기온은 제한시간을 정하는 값이다. 주문할 때 기록한 온도로 90분/120분이
+          굳었는데, 타설은 몇 시간씩 이어진다. 그 사이 25℃ 를 넘나들면 처음 받은
+          제한이 더 이상 안전하지 않으므로 지금 기온을 같이 보여 준다.
+        */}
+        <Row label="외기온도">
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{tempC}℃</span>{' '}
+          <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--color-concrete-mid)' }}>
+            주문 시 기록 · 이어치기 한도 {monitor.coldJointLimitMin}분을 정한 값
+          </span>
+        </Row>
+        <div style={{ padding: '6px 0' }}>
+          <TempNow at={site} recordedC={tempC} />
+        </div>
 
         <p style={{ fontSize: '0.74rem', color: 'var(--color-concrete-mid)', margin: '10px 0 0' }}>
           이어치기 간격은 KCS 14 20 10 표 3.3-1 의 정의(하층 비비기 시작 ~ 상층 타설)로 잽니다.

@@ -14,6 +14,7 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { SiteShell } from '@/components/RoleShells';
+import TempNow from '@/components/TempNow';
 import UrgentRequest from '@/components/UrgentRequest';
 import { Alert, Bar, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
 import { analyzeDelay, monitorPour } from '@/lib/ai/predict';
@@ -194,6 +195,11 @@ function DashboardBody({ site }: { site: Site }) {
         >
           <div style={{ marginBottom: 12 }}>
             <Bar done={monitor.pouredM3} total={totalVolumeM3} />
+          </div>
+
+          {/* 제한시간을 가르는 값이라 지금 몇 도인지 현황판에서 바로 보이게 둔다 */}
+          <div style={{ marginBottom: 12 }}>
+            <TempNow at={site} recordedC={tempC} />
           </div>
 
           <StatGrid>

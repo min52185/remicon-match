@@ -105,6 +105,10 @@ export default function KakaoMap({
   const followRef = useRef<{ lat: number; lng: number } | null>(null);
   const followOnRef = useRef(false);
 
+  /** 크기 변화 때 다시 맞추려면 지금 무엇을 그리고 있는지 알아야 한다 */
+  const dataRef = useRef<{ markers: MapMarker[]; paths: MapPath[] }>({ markers, paths });
+  dataRef.current = { markers, paths };
+
   followRef.current = follow ?? null;
   followOnRef.current = !!follow && !followBroken;
 
@@ -352,6 +356,36 @@ export default function KakaoMap({
     fitSigRef.current = fitSig;
     quietly(() => fitAll(map, markers, paths));
   }, [status, fitSig, userMoved, center, level, follow, followBroken, followLevel, markers, paths]);
+
+  // ── 칸 크기가 바뀌면 지도에 알린다 ──
+  useEffect(() => {
+    const box = boxRef.current;
+    const map = mapRef.current;
+    if (status !== 'ready' || !box || !map) return;
+    if (typeof ResizeObserver === 'undefined') return;
+
+    /**
+     * 카카오맵은 제 칸이 얼마나 큰지를 만들어질 때 재어 두고 그대로 쓴다. 칸이
+     * 바뀌었는데 알려 주지 않으면 투영이 어긋나, 전체 맞춤이 옛 크기로 계산돼
+     * 엉뚱하게 넓은 화면이 나온다 (휴대폰을 돌리거나 창을 줄일 때 그렇다).
+     */
+    let first = true;
+    const ro = new ResizeObserver(() => {
+      if (first) {
+        first = false; // 생성 직후 한 번은 이미 맞는 크기다
+        return;
+      }
+      map.relayout();
+      // 사용자가 카메라를 잡은 뒤에는 건드리지 않는다 — 위 규칙 그대로
+      if (!userMoved && !center && !follow) {
+        selfMoveUntil.current = Date.now() + 500;
+        const { markers: m, paths: p } = dataRef.current;
+        if (m.length > 0) fitAll(map, m, p);
+      }
+    });
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [status, userMoved, center, follow]);
 
   // ── 미끄러지는 이동 + 네비 따라가기 ──
   useEffect(() => {
