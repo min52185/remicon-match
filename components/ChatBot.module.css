@@ -180,18 +180,17 @@
 }
 
 /* 입력칸 위에 늘 있는 추천 질문 — 한 줄로 두고 옆으로 민다 (대화 칸을 덜 잡아먹게) */
+/*
+ * 칸이 모자라면 다음 줄로 넘긴다. 옆으로 밀게 했더니 컴퓨터에서는 마우스 휠이
+ * 세로로만 움직여 뒤쪽 질문에 닿을 방법이 없었다. 많아야 3개라 두 줄이면 다 들어간다.
+ */
 .suggestions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 10px 0;
-  overflow-x: auto;
   background: var(--color-card);
   border-top: 1px solid var(--color-line);
-  scrollbar-width: none;
-}
-
-.suggestions::-webkit-scrollbar {
-  display: none;
 }
 
 .suggestions + .inputRow {
@@ -199,9 +198,11 @@
 }
 
 .suggestions button {
-  flex: none;
-  white-space: nowrap;
+  max-width: 100%;
   padding: 6px 10px;
+  line-height: 1.3;
+  text-align: left;
+  word-break: keep-all;
   border: 1px solid var(--color-rust);
   border-radius: 999px;
   background: var(--color-card);
