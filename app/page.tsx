@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PLANS } from '@/lib/plans';
 import s from './landing.module.css';
 
 const PROCESS = [
@@ -41,29 +42,6 @@ const WHY = [
     tag: '입력 부담',
     title: '두 번째 주문부터는 한 번에',
     body: '현장마다 쓰는 배합은 정해져 있습니다. “2층 슬래브 25-24-150”을 저장해 두면 다음 타설은 카드 한 번으로 주문서가 채워집니다.',
-  },
-];
-
-// 가격은 사업성 검토 후 확정한다 — 그 전까지 금액 대신 안내 문구를 둔다
-const PLANS = [
-  {
-    name: '베이직',
-    target: '소규모 현장 · 처음 쓰는 곳',
-    price: '출시 시 공개',
-    features: ['레미콘 주문 · 즐겨찾기 배합', '실시간 배송 추적 · 도착 예정', '전자 납품서'],
-  },
-  {
-    name: '프로',
-    target: '타설이 잦은 중규모 현장',
-    price: '출시 시 공개',
-    recommended: true,
-    features: ['베이직의 모든 기능', 'AI 다공장 배분 추천', '타설 모니터 · 콜드조인트 경고'],
-  },
-  {
-    name: '엔터프라이즈',
-    target: '여러 현장을 운영하는 건설사',
-    price: '별도 협의',
-    features: ['프로의 모든 기능', '급처 매칭 우선 배정', '현장 통합 관리 · 공급 품질 리포트'],
   },
 ];
 
@@ -204,10 +182,10 @@ export default function LandingPage() {
             <div className={s.planGrid}>
               {PLANS.map((p) => (
                 <article
-                  key={p.name}
+                  key={p.id}
                   className={`${s.planCard} ${p.recommended ? s.planRecommended : ''}`}
                 >
-                  {p.recommended && <span className={s.whyTag}>추천</span>}
+                  {p.recommended && <span className={`${s.whyTag} ${s.planBadge}`}>추천</span>}
                   <h3>{p.name}</h3>
                   <p className={s.planTarget}>{p.target}</p>
                   <p className={s.planPrice}>{p.price}</p>
@@ -216,6 +194,12 @@ export default function LandingPage() {
                       <li key={f}>{f}</li>
                     ))}
                   </ul>
+                  <Link
+                    href={`/subscribe?plan=${p.id}`}
+                    className={`btn btn-block ${p.recommended ? 'btn-primary' : 'btn-outline'} ${s.planCta}`}
+                  >
+                    {p.contactOnly ? '도입 문의하기' : `${p.name} 시작하기`}
+                  </Link>
                 </article>
               ))}
             </div>

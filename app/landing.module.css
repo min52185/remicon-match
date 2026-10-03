@@ -322,6 +322,7 @@
 }
 
 .planCard {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -332,6 +333,18 @@
 
 .planRecommended {
   border: 2px solid var(--color-rust);
+}
+
+/* 배지가 제목을 밀어내지 않게 모서리에 띄운다 — 세 카드의 제목 높이를 맞춘다 */
+.planBadge {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+}
+
+/* 기능 수가 달라도 버튼은 카드 바닥에 맞춘다 */
+.planCta {
+  margin-top: auto;
 }
 
 .planCard h3 {
@@ -353,7 +366,7 @@
 
 .planFeatures {
   list-style: none;
-  margin: 0;
+  margin: 0 0 28px;
   padding: 16px 0 0;
   width: 100%;
   border-top: 1px solid var(--color-line);
@@ -368,6 +381,17 @@
   content: '✓ ';
   color: var(--color-rust);
   font-weight: 700;
+}
+
+/* ---------- 요금제 신청 ---------- */
+.subscribeWrap {
+  max-width: 560px;
+}
+
+.subscribeNote {
+  margin: 0 0 20px;
+  font-size: 0.88rem;
+  color: var(--color-concrete-mid);
 }
 
 /* ---------- 역할 선택 ---------- */
