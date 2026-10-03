@@ -489,7 +489,7 @@ function deliveryLine(d: DeliveryFact): string {
   return where + late + limit;
 }
 
-const EXAMPLES = '"아까 주문한 거 왜 안 와요?", "근처 공장 어때?", "급처 매물 있어?", "슬럼프가 뭐예요?"';
+const EXAMPLES = '"아까 주문한 거 왜 안 와요?", "근처 공장 어때?", "급처 매물 있어?", "지금 슬럼프 얼마야?"';
 
 /* ==========================================================================
  * 이어서 물어볼 질문
@@ -500,80 +500,77 @@ const EXAMPLES = '"아까 주문한 거 왜 안 와요?", "근처 공장 어때?
  * ======================================================================== */
 
 export const SITE_STARTERS = ['아까 주문한 거 왜 안 와요?', '지금 근처 공장들 어때?', '급처 매물 있어?'];
-export const GENERAL_STARTERS = ['슬럼프가 뭐예요?', '제한시간이 뭐예요?', '콜드조인트가 뭐야?'];
 
-/** 지식 질문 다음에 이어 물을 것 — 내 현장 질문은 현장이 있을 때만 쓴다 */
-const FAQ_NEXT: Record<string, { general: string[]; site?: string[] }> = {
-  flow: { general: ['슬럼프가 뭐예요?', '규격 읽는 법 알려줘'] },
-  slump: { general: ['슬럼프 플로가 뭐야?', '규격 읽는 법 알려줘'], site: ['지금 슬럼프 얼마야?'] },
-  spec: { general: ['슬럼프가 뭐예요?', '슬럼프 플로가 뭐야?'], site: ['지금 근처 공장들 어때?'] },
-  coldjoint: { general: ['제한시간이 뭐예요?', '양생이 뭐야?'], site: ['콜드조인트 괜찮아?', '콜드조인트 막으려면?'] },
-  limit: { general: ['콜드조인트가 뭐야?'], site: ['굳기 전까지 얼마나 남았어?', '제한시간 안에 올 수 있는 공장은?'] },
-  curing: { general: ['콜드조인트가 뭐야?'] },
-  surplus: { general: ['제한시간이 뭐예요?'], site: ['급처 매물 있어?', '급처 얼마나 싸?'] },
-  allocate: { general: ['긴급주문이 뭐야?', '주문은 어떻게 해?'] },
-  urgent: { general: ['AI 배분이 뭐야?', '주문은 어떻게 해?'] },
-  note: { general: ['즐겨찾기는 어떻게 써?'], site: ['주문 상태 알려줘'] },
-  favorite: { general: ['주문은 어떻게 해?'] },
-  howto: { general: ['즐겨찾기는 어떻게 써?', '긴급주문이 뭐야?'], site: ['주문 상태 알려줘'] },
+/*
+ * 추천은 '지금 내 현장' 질문만 한다. 현장 사람들은 슬럼프·콜드조인트 같은 개념을
+ * 이미 알아서, "슬럼프가 뭐예요?" 를 권하면 자리만 차지한다. (직접 물으면 답은 한다)
+ * 그래서 현장을 모르는 화면(공장·기사 계정)에서는 아무것도 권하지 않는다.
+ */
+
+/** 개념을 직접 물었을 때 — 그 개념이 내 현장에서 지금 어떤지로 잇는다 */
+const FAQ_NEXT: Record<string, string[]> = {
+  flow: ['지금 슬럼프 얼마야?', '아까 주문한 거 왜 안 와요?'],
+  slump: ['지금 슬럼프 얼마야?', '아까 주문한 거 왜 안 와요?'],
+  spec: ['지금 슬럼프 얼마야?', '지금 근처 공장들 어때?'],
+  coldjoint: ['콜드조인트 괜찮아?', '콜드조인트 막으려면?', '다음 차는 언제 와?'],
+  limit: ['굳기 전까지 얼마나 남았어?', '제한시간 안에 올 수 있는 공장은?'],
+  curing: ['남은 물량 얼마야?', '타설 끊길 것 같아?'],
+  surplus: ['급처 매물 있어?', '급처 얼마나 싸?'],
+  allocate: ['지금 근처 공장들 어때?', '공장마다 차 몇 대 남았어?'],
+  urgent: ['지금 근처 공장들 어때?', '제한시간 안에 올 수 있는 공장은?'],
+  note: ['주문 상태 알려줘', '아까 주문한 거 왜 안 와요?'],
+  favorite: ['주문 상태 알려줘', '지금 근처 공장들 어때?'],
+  howto: ['주문 상태 알려줘', '지금 근처 공장들 어때?'],
 };
 
 /**
- * 방금 한 질문에 이어 물을 만한 질문 3개.
+ * 방금 한 질문에 이어 물을 만한 질문 — 많아야 3개, 현장이 없으면 없다.
  * 같은 질문은 다시 권하지 않는다.
  */
 export function followUps(question: string, c: SiteContext | null): string[] {
+  if (!c) return [];
+
   const intent = classify(question);
   const q = normalize(question);
-  const firstTruck = c?.deliveries[0]?.truck;
+  const firstTruck = c.deliveries[0]?.truck;
+  const late = c.deliveries.some((d) => d.delayMin > 0);
+  const hasTrucks = c.deliveries.length > 0;
+  /** "3호차 어디야" 처럼 차를 콕 집어 물었으면 그 번호 */
+  const askedNo = q.match(/(\d+)호차/)?.[1];
+  const whereTruck = firstTruck ? `${firstTruck} 어디야?` : '주문 상태 알려줘';
+  const lateOrNext = late ? '왜 늦어?' : '다음 차는 언제 와?';
 
-  let next: string[];
-  if (intent === 'faq') {
-    const f = FAQ_NEXT[findFaq(q)!.id];
-    next = [...(c && f.site ? f.site : []), ...f.general];
-  } else if (!c || intent === 'smalltalk' || intent === 'general') {
-    next = c ? SITE_STARTERS : GENERAL_STARTERS;
-  } else {
-    // 방금 답을 한 단계 더 파고드는 질문 — 같은 주제 안에서만 고른다
-    const late = c.deliveries.some((d) => d.delayMin > 0);
-    const hasTrucks = c.deliveries.length > 0;
-    /** "3호차 어디야" 처럼 차를 콕 집어 물었으면 그 번호 */
-    const askedNo = q.match(/(\d+)호차/)?.[1];
-    const byIntent: Partial<Record<Intent, string[]>> = {
-      delivery: hasTrucks
-        ? [`${firstTruck} 어디야?`, late ? '왜 늦어?' : '지금 슬럼프 얼마야?', '굳기 전까지 얼마나 남았어?']
-        : ['주문 상태 알려줘', '몇 시 타설이야?'],
-      truck: [
-        askedNo ? `${askedNo}호차 슬럼프 얼마야?` : '지금 슬럼프 얼마야?',
-        late ? '왜 늦어?' : '다음 차는 언제 와?',
-        '굳기 전까지 얼마나 남았어?',
-      ],
-      slump: [
-        '슬럼프가 뭐예요?',
-        '굳기 전까지 얼마나 남았어?',
-        late ? '왜 늦어?' : '다음 차는 언제 와?',
-      ],
-      limitLeft: [late ? '왜 늦어?' : '다음 차는 언제 와?', '타설 끊길 것 같아?', '제한시간이 뭐예요?'],
-      delayWhy: ['굳기 전까지 얼마나 남았어?', '다음 차는 언제 와?', '타설 끊길 것 같아?'],
-      nextTruck: [firstTruck ? `${firstTruck} 어디야?` : '주문 상태 알려줘', '굳기 전까지 얼마나 남았어?', '남은 물량 얼마야?'],
-      order: ['몇 시 타설이야?', '아까 주문한 거 왜 안 와요?'],
-      orderTime: ['주문 상태 알려줘', '아까 주문한 거 왜 안 와요?'],
-      pour: ['콜드조인트 막으려면?', '남은 물량 얼마야?', '다음 차는 언제 와?'],
-      pourFix: ['다음 차는 언제 와?', '남은 물량 얼마야?', '콜드조인트가 뭐야?'],
-      pourRemain: ['다음 차는 언제 와?', '타설 끊길 것 같아?'],
-      surplus: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
-      surplusPrice: ['급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
-      surplusDeadline: ['급처 얼마나 싸?', '급처 어떻게 받아?'],
-      surplusHow: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?'],
-      plants: ['제한시간 안에 올 수 있는 공장은?', '공장마다 차 몇 대 남았어?'],
-      plantsInTime: ['공장마다 차 몇 대 남았어?', '지금 근처 공장들 어때?'],
-      plantsTrucks: ['제한시간 안에 올 수 있는 공장은?', '지금 근처 공장들 어때?'],
-    };
-    next = byIntent[intent] ?? SITE_STARTERS;
-  }
+  // 방금 답을 한 단계 더 파고드는 질문 — 같은 주제 안에서만 고른다
+  const byIntent: Partial<Record<Intent, string[]>> = {
+    delivery: hasTrucks
+      ? [whereTruck, late ? '왜 늦어?' : '지금 슬럼프 얼마야?', '굳기 전까지 얼마나 남았어?']
+      : ['주문 상태 알려줘', '몇 시 타설이야?'],
+    truck: [
+      askedNo ? `${askedNo}호차 슬럼프 얼마야?` : '지금 슬럼프 얼마야?',
+      lateOrNext,
+      '굳기 전까지 얼마나 남았어?',
+    ],
+    slump: ['굳기 전까지 얼마나 남았어?', lateOrNext, whereTruck],
+    limitLeft: [lateOrNext, '지금 슬럼프 얼마야?', '타설 끊길 것 같아?'],
+    delayWhy: ['굳기 전까지 얼마나 남았어?', '다음 차는 언제 와?', '타설 끊길 것 같아?'],
+    nextTruck: [whereTruck, '굳기 전까지 얼마나 남았어?', '남은 물량 얼마야?'],
+    order: ['몇 시 타설이야?', '아까 주문한 거 왜 안 와요?'],
+    orderTime: ['주문 상태 알려줘', '아까 주문한 거 왜 안 와요?'],
+    pour: ['콜드조인트 막으려면?', '남은 물량 얼마야?', '다음 차는 언제 와?'],
+    pourFix: ['다음 차는 언제 와?', '남은 물량 얼마야?', '타설 끊길 것 같아?'],
+    pourRemain: ['다음 차는 언제 와?', '타설 끊길 것 같아?'],
+    surplus: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
+    surplusPrice: ['급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
+    surplusDeadline: ['급처 얼마나 싸?', '급처 어떻게 받아?'],
+    surplusHow: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?'],
+    plants: ['제한시간 안에 올 수 있는 공장은?', '공장마다 차 몇 대 남았어?'],
+    plantsInTime: ['공장마다 차 몇 대 남았어?', '지금 근처 공장들 어때?'],
+    plantsTrucks: ['제한시간 안에 올 수 있는 공장은?', '지금 근처 공장들 어때?'],
+  };
 
-  const asked = normalize(question);
-  return next.filter((x) => normalize(x) !== asked).slice(0, 3);
+  const next =
+    intent === 'faq' ? FAQ_NEXT[findFaq(q)!.id] : (byIntent[intent] ?? SITE_STARTERS);
+  return next.filter((x) => normalize(x) !== q).slice(0, 3);
 }
 
 /**

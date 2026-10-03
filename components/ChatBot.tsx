@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { GENERAL_STARTERS, SITE_STARTERS, buildSiteContext, followUps } from '@/lib/ai/assistant';
+import { SITE_STARTERS, buildSiteContext, followUps } from '@/lib/ai/assistant';
 import { askAssistant, type ChatTurn } from '@/lib/services/assistant';
 import { simClock } from '@/lib/services/clock';
 import { getTemperature } from '@/lib/services/weather';
@@ -64,6 +64,8 @@ export default function ChatBot({ site: shellSite }: { site?: Site }) {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, busy]);
+
+  const suggestions = next ?? (site ? SITE_STARTERS : []);
 
   async function send(text: string) {
     const question = text.trim();
@@ -122,15 +124,18 @@ export default function ChatBot({ site: shellSite }: { site?: Site }) {
 
           {/*
             추천 질문 — 늘 입력칸 위에 둔다. 처음에는 대표 질문, 답한 뒤에는
-            방금 질문에 이어 물을 만한 것으로 바뀐다.
+            방금 질문에 이어 물을 만한 것으로 바뀐다. 전부 '지금 내 현장' 질문이라
+            현장을 모르는 화면(공장·기사 계정)에서는 줄째로 숨긴다.
           */}
-          <div className={s.suggestions} aria-label="이어서 물어볼 질문">
-            {(next ?? (site ? SITE_STARTERS : GENERAL_STARTERS)).map((q) => (
-              <button key={q} type="button" disabled={busy} onClick={() => void send(q)}>
-                {q}
-              </button>
-            ))}
-          </div>
+          {suggestions.length > 0 && (
+            <div className={s.suggestions} aria-label="이어서 물어볼 질문">
+              {suggestions.map((q) => (
+                <button key={q} type="button" disabled={busy} onClick={() => void send(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
 
           <form
             className={s.inputRow}

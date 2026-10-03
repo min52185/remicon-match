@@ -8,7 +8,6 @@ import {
   classify,
   contextBlock,
   followUps,
-  GENERAL_STARTERS,
   offlineAnswer,
   plain,
   SITE_STARTERS,
@@ -144,12 +143,11 @@ describe('이어서 물어볼 질문', () => {
     plants: [],
     surplus: [],
   };
-  const SITE_INTENTS = ['truck', 'order', 'delivery', 'pour', 'surplus', 'plants'];
 
   /** 지금까지 나올 수 있는 질문 전부 — 추천을 따라가며 모은다 */
   function reachable(c: SiteContext | null) {
     const seen = new Set<string>();
-    const queue = [...(c ? SITE_STARTERS : GENERAL_STARTERS), '슬럼프', '안녕', '점심 뭐 먹지'];
+    const queue = [...SITE_STARTERS, '슬럼프', '슬럼프가 뭐예요?', '콜드조인트가 뭐야?', '안녕', '점심 뭐 먹지'];
     while (queue.length > 0) {
       const q = queue.shift()!;
       if (seen.has(q)) continue;
@@ -169,11 +167,17 @@ describe('이어서 물어볼 질문', () => {
     }
   });
 
-  it('현장이 없으면 내 현장 질문을 권하지 않는다', () => {
-    for (const q of reachable(null)) {
-      for (const next of followUps(q, null)) {
-        expect(SITE_INTENTS, `${q} → ${next}`).not.toContain(classify(next));
+  it('개념 설명(슬럼프가 뭐예요 등)은 권하지 않는다 — 현장 사람들은 이미 안다', () => {
+    for (const q of reachable(site)) {
+      for (const next of followUps(q, site)) {
+        expect(classify(next), `${q} → ${next}`).not.toBe('faq');
       }
+    }
+  });
+
+  it('현장을 모르는 화면(공장·기사 계정)에서는 아무것도 권하지 않는다', () => {
+    for (const q of [...SITE_STARTERS, '슬럼프가 뭐예요?', '안녕', '점심 뭐 먹지']) {
+      expect(followUps(q, null), q).toEqual([]);
     }
   });
 
@@ -226,8 +230,7 @@ describe('이어서 물어볼 질문', () => {
       expect(topic, q).toBeDefined();
       for (const next of followUps(q, site)) {
         const t = TOPIC[classify(next)];
-        // 지식 질문(제한시간이 뭐예요 등)은 같은 주제의 설명이라 허용한다
-        if (classify(next) !== 'faq') expect(t, `${q} → ${next}`).toBe(topic);
+        expect(t, `${q} → ${next}`).toBe(topic);
       }
     }
   });
@@ -248,8 +251,8 @@ describe('이어서 물어볼 질문', () => {
     expect(classify(q)).toBe(intent);
   });
 
-  it('지식 질문 다음에는 관련 지식을 권한다', () => {
-    expect(followUps('슬럼프가 뭐예요?', null)).toContain('슬럼프 플로가 뭐야?');
+  it('개념을 직접 물었으면 그 개념이 내 현장에서 지금 어떤지로 잇는다', () => {
+    expect(followUps('슬럼프가 뭐예요?', site)).toContain('지금 슬럼프 얼마야?');
     expect(followUps('콜드조인트가 뭐야?', site)).toContain('콜드조인트 괜찮아?');
   });
 });
