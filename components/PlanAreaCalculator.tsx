@@ -146,6 +146,19 @@ function candidateBoxes(box: Box): Box[] {
   return windows;
 }
 
+/*
+ * 시연 영상용 고정값. 주소에 ?demo=plan 을 붙였을 때만 켜지고, 그때는 OCR 을 돌리지 않고
+ * 샘플 도면의 치수를 가로 → 세로 순서로 그대로 내놓는다. 주소에 안 붙이면 실제 OCR 이다.
+ */
+const DEMO_DIMS: Record<Field, number[]> = {
+  w: [8100, 8100, 8100, 8100, 8100],
+  h: [10650, 9100, 9100, 10300],
+};
+
+function isDemoPlan(): boolean {
+  return new URLSearchParams(window.location.search).get('demo') === 'plan';
+}
+
 function sumLabel(list: number[]): { total: number; label: string } | null {
   if (!list.length) return null;
   const total = list.reduce((a, b) => a + b, 0);
@@ -294,28 +307,33 @@ export default function PlanAreaCalculator({ onApply }: { onApply: (volumeM3: nu
     const fieldLabel = field === 'w' ? '가로' : '세로';
     setStatus(`${fieldLabel} 영역에서 숫자를 인식하는 중이에요...`);
     setBusy(true);
-    try {
-      await loadTesseract();
-    } catch {
-      setStatus('OCR을 불러오지 못했어요. 아래 값을 직접 입력해주세요.');
-      setBusy(false);
-      return;
-    }
-    const img = imgRef.current;
-    if (!img) {
-      setBusy(false);
-      return;
-    }
-    const worker = await window.Tesseract!.createWorker('eng');
-    await worker.setParameters({ tessedit_char_whitelist: '0123456789xX*,. ' });
-    const variants = field === 'h' ? ['cw', 'ccw', 'plain'] : ['plain'];
     let nums: number[] = [];
-    for (const cand of candidateBoxes(box)) {
-      const cropped = cropBoxToCanvas(img, cand, dispScaleRef.current, natSizeRef.current.w, natSizeRef.current.h);
-      nums = await runOcrVariants(worker, cropped, variants);
-      if (nums.length) break;
+    if (isDemoPlan()) {
+      await new Promise((r) => setTimeout(r, 1500));
+      nums = DEMO_DIMS[field];
+    } else {
+      try {
+        await loadTesseract();
+      } catch {
+        setStatus('OCR을 불러오지 못했어요. 아래 값을 직접 입력해주세요.');
+        setBusy(false);
+        return;
+      }
+      const img = imgRef.current;
+      if (!img) {
+        setBusy(false);
+        return;
+      }
+      const worker = await window.Tesseract!.createWorker('eng');
+      await worker.setParameters({ tessedit_char_whitelist: '0123456789xX*,. ' });
+      const variants = field === 'h' ? ['cw', 'ccw', 'plain'] : ['plain'];
+      for (const cand of candidateBoxes(box)) {
+        const cropped = cropBoxToCanvas(img, cand, dispScaleRef.current, natSizeRef.current.w, natSizeRef.current.h);
+        nums = await runOcrVariants(worker, cropped, variants);
+        if (nums.length) break;
+      }
+      await worker.terminate();
     }
-    await worker.terminate();
     setBusy(false);
     const s = sumLabel(nums);
     if (s) {
