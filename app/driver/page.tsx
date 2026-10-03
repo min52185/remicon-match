@@ -82,6 +82,19 @@ function DriverBody() {
     .map((d) => d.id);
   const urgent = useUrgentAlert(urgentIds);
 
+  /**
+   * 지금 굴러가고 있는 배송. 상차가 끝나(departAt 이 지나) 운반 중인 첫 건이다.
+   * 이게 있으면 화면은 네비게이션이 된다.
+   */
+  const [showList, setShowList] = useState(false);
+  const moving = open.find((d) => DeliveryRules.phase(d, now) === 'transit');
+  const driving = showList ? undefined : moving;
+
+  // 운행이 끝나면(도착·완료) 목록으로 자연스럽게 돌아간다
+  useEffect(() => {
+    if (!moving && showList) setShowList(false);
+  }, [moving, showList]);
+
   if (!mounted) return <Empty>불러오는 중…</Empty>;
 
   return (
@@ -126,20 +139,56 @@ function DriverBody() {
         </Panel>
       )}
 
-      <MyProfile />
-
-      {!demoMode && <MyTruck truck={myTruck} />}
-
-      {!demoMode && !myTruck ? null : open.length === 0 ? (
-        <Panel>
-          <Empty>
-            배정된 배송이 없습니다.
-            <br />
-            레미콘사가 {myTruck ? `${myTruck.no}호차에 ` : ''}출하 지시를 내리면 여기에 뜹니다.
-          </Empty>
-        </Panel>
+      {/*
+        운행이 시작되면 그 배송 하나가 화면을 차지한다.
+        상차 중에는 여러 건을 훑어볼 일이 있지만, 일단 바퀴가 구르면 기사가 볼 것은
+        "지금 가는 길" 하나뿐이다. 그때까지 하던 대로 카드를 쌓아 두면 운전석에서
+        지도가 손바닥만 하게 남는다.
+      */}
+      {driving ? (
+        <DeliveryPanel
+          key={driving.id}
+          delivery={driving}
+          now={now}
+          navMode
+          onShowList={open.length > 1 ? () => setShowList(true) : undefined}
+        />
       ) : (
-        open.map((d) => <DeliveryPanel key={d.id} delivery={d} now={now} />)
+        <>
+          {/* 운행 중인데 목록을 보러 나왔다 — 돌아갈 길을 맨 위에 둔다 */}
+          {moving && (
+            <Panel style={{ borderWidth: 2, borderColor: 'var(--color-rust)' }}>
+              <strong style={{ fontSize: '0.94rem' }}>운행 중입니다</strong>
+              <p style={{ fontSize: '0.86rem', margin: '6px 0 12px', lineHeight: 1.6 }}>
+                {db.sites.find((s) => s.id === moving.siteId)?.name ?? '현장'} 으로 가는 중 ·
+                도착 예상 {clock(moving.etaCurrentAt)}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                onClick={() => setShowList(false)}
+              >
+                네비게이션으로 돌아가기
+              </button>
+            </Panel>
+          )}
+
+          <MyProfile />
+
+          {!demoMode && <MyTruck truck={myTruck} />}
+
+          {!demoMode && !myTruck ? null : open.length === 0 ? (
+            <Panel>
+              <Empty>
+                배정된 배송이 없습니다.
+                <br />
+                레미콘사가 {myTruck ? `${myTruck.no}호차에 ` : ''}출하 지시를 내리면 여기에 뜹니다.
+              </Empty>
+            </Panel>
+          ) : (
+            open.map((d) => <DeliveryPanel key={d.id} delivery={d} now={now} />)
+          )}
+        </>
       )}
     </>
   );
@@ -383,7 +432,18 @@ function MyTruck({ truck }: { truck?: Truck }) {
   );
 }
 
-function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
+function DeliveryPanel({
+  delivery,
+  now,
+  navMode,
+  onShowList,
+}: {
+  delivery: Delivery;
+  now: number;
+  /** 운행 중이라 이 배송 하나가 화면을 차지한다 — 지도를 키우고 상세는 접는다 */
+  navMode?: boolean;
+  onShowList?: () => void;
+}) {
   const db = useDb();
   const { profile } = useAuth();
   const truck = db.trucks.find((t) => t.id === delivery.truckId);
@@ -401,6 +461,8 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
   const queue = siteQueue(db, delivery, now);
 
   const [tracking, setTracking] = useState(false);
+  /** 운행 중에 상세를 펼쳐 봤나 */
+  const [detail, setDetail] = useState(false);
   const [consented, setConsented] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSentAt, setLastSentAt] = useState<number | null>(null);
@@ -487,7 +549,11 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
         </div>
       )}
 
-      {/* 네비게이션 — 기사가 가장 먼저 보는 것 */}
+      {/*
+        네비게이션 — 기사가 가장 먼저 보는 것.
+        운행 중에는 지도를 크게 잡는다. 운전석에서 보는 화면이라 작은 카드로는
+        길이 안 읽힌다.
+      */}
       {site && (
         <Nav
           delivery={delivery}
@@ -496,31 +562,74 @@ function DeliveryPanel({ delivery, now }: { delivery: Delivery; now: number }) {
           plant={plant}
           now={now}
           driving={tracking || phase === 'transit'}
+          height={navMode ? 400 : 280}
         />
       )}
 
       {/* 현장 도착 대기 — 가서 바로 부을 수 있나 */}
       {phase !== 'done' && <ArrivalQueue delivery={delivery} queue={queue} now={now} />}
 
-      <Row label="차량">
-        {truck?.plateNo} · {truck?.driver}
-      </Row>
-      <Row label="공장">{plant?.name}</Row>
-      <Row label="현장">{site?.address}</Row>
-      {site?.accessNote && <Row label="진입 메모">{site.accessNote}</Row>}
-      <Row label="적재">{m3(delivery.volumeM3)}</Row>
-      {order && <Row label="사양">{specText(order.spec)}</Row>}
-      <Row label="비비기 시작">{clock(delivery.mixStartAt)}</Row>
-      <Row label="도착 예상">{clock(delivery.etaCurrentAt)}</Row>
-      <Row label="타설 기한">
-        {clock(delivery.limitAt)}{' '}
-        <Tag tone={DeliveryRules.limitLevel(delivery, now)}>
-          {limitRemaining(delivery.limitAt, delivery.etaCurrentAt, now)}
-        </Tag>
-      </Row>
-      <Row label="이동">
-        {duration(delivery.travelMinutes)} · {delivery.distanceKm}km
-      </Row>
+      {/*
+        운행 중에는 상세를 접는다. 운전하면서 읽을 것은 남은 거리·시간·도착뿐이고,
+        차량번호나 사양은 출발 전에 이미 본 것이다. 다만 진입 메모와 타설 기한은
+        운전 중에도 쓰이므로 접어 두지 않는다.
+      */}
+      {navMode && (
+        <>
+          <Row label="타설 기한">
+            {clock(delivery.limitAt)}{' '}
+            <Tag tone={DeliveryRules.limitLevel(delivery, now)}>
+              {limitRemaining(delivery.limitAt, delivery.etaCurrentAt, now)}
+            </Tag>
+          </Row>
+          {site?.accessNote && <Row label="진입 메모">{site.accessNote}</Row>}
+        </>
+      )}
+
+      {(!navMode || detail) && (
+        <>
+          <Row label="차량">
+            {truck?.plateNo} · {truck?.driver}
+          </Row>
+          <Row label="공장">{plant?.name}</Row>
+          <Row label="현장">{site?.address}</Row>
+          {!navMode && site?.accessNote && <Row label="진입 메모">{site.accessNote}</Row>}
+          <Row label="적재">{m3(delivery.volumeM3)}</Row>
+          {order && <Row label="사양">{specText(order.spec)}</Row>}
+          <Row label="비비기 시작">{clock(delivery.mixStartAt)}</Row>
+          <Row label="도착 예상">{clock(delivery.etaCurrentAt)}</Row>
+          {!navMode && (
+            <Row label="타설 기한">
+              {clock(delivery.limitAt)}{' '}
+              <Tag tone={DeliveryRules.limitLevel(delivery, now)}>
+                {limitRemaining(delivery.limitAt, delivery.etaCurrentAt, now)}
+              </Tag>
+            </Row>
+          )}
+          <Row label="이동">
+            {duration(delivery.travelMinutes)} · {delivery.distanceKm}km
+          </Row>
+        </>
+      )}
+
+      {navMode && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ flex: 1 }}
+            onClick={() => setDetail((v) => !v)}
+            aria-expanded={detail}
+          >
+            {detail ? '상세 접기' : '배송 상세 보기'}
+          </button>
+          {onShowList && (
+            <button type="button" className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={onShowList}>
+              전체 목록
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <p style={{ color: 'var(--color-bad)', fontSize: '0.84rem', margin: '12px 0 0' }}>{error}</p>
