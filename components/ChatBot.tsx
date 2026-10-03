@@ -13,7 +13,8 @@ import { buildSiteContext } from '@/lib/ai/assistant';
 import { askAssistant, type ChatTurn } from '@/lib/services/assistant';
 import { simClock } from '@/lib/services/clock';
 import { getTemperature } from '@/lib/services/weather';
-import { useDb } from '@/lib/store/hooks';
+import { useAuth } from '@/lib/auth';
+import { useDb, useSelection } from '@/lib/store/hooks';
 import type { Site } from '@/lib/types';
 import s from './ChatBot.module.css';
 
@@ -22,11 +23,27 @@ const NAME = '레캉쌤';
 /** 현장 화면에서 바로 누를 수 있는 질문 */
 const SUGGESTIONS = ['아까 주문한 거 왜 안 와요?', '지금 근처 공장들 어때?', '급처 매물 있어?'];
 
-export default function ChatBot({ site }: { site?: Site }) {
+export default function ChatBot({ site: shellSite }: { site?: Site }) {
   const db = useDb();
+  const { demoMode, profile } = useAuth();
+  const [lastSiteId] = useSelection('site', '');
+
+  /*
+   * 현장 화면 밖(첫 화면)에서도 내 현장 이야기에 답하려고 현장을 스스로 정한다.
+   *   로그인한 현장 계정  → 그 계정의 현장
+   *   시연 모드          → 마지막으로 보던 현장, 없으면 첫 현장
+   * 공장·기사 계정이면 정하지 않는다 — 남의 현장 배송을 읽어 주면 안 된다.
+   */
+  const site =
+    shellSite ??
+    (demoMode
+      ? (db.sites.find((x) => x.id === lastSiteId) ?? db.sites[0])
+      : profile?.role === 'site'
+        ? db.sites.find((x) => x.id === profile.siteId)
+        : undefined);
   const [open, setOpen] = useState(false);
   // 앱 화면 안에서는 말풍선이 화면을 가리지 않게 처음부터 접어 둔다
-  const [bubbleHidden, setBubbleHidden] = useState(!!site);
+  const [bubbleHidden, setBubbleHidden] = useState(!!shellSite);
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,7 +81,7 @@ export default function ChatBot({ site }: { site?: Site }) {
   }
 
   return (
-    <div className={`${s.root} ${site ? s.docked : ''}`}>
+    <div className={`${s.root} ${shellSite ? s.docked : ''}`}>
       {open && (
         <section className={s.panel} role="dialog" aria-label={`AI 튜터 ${NAME}`}>
           <header className={s.panelHead}>
