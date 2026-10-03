@@ -304,10 +304,11 @@ function useDispatchChanges(open: Delivery[]) {
             : `${clock(gone.completedAt)} 타설 완료로 기록했습니다.`,
         });
       } else {
+        // 완료 기록 없이 사라졌다 — 취소됐거나 다른 차로 넘어간 것이다
         found.push({
-          tone: 'ok',
-          title: '납품 완료',
-          detail: '현장에 도착해 납품이 완료됐습니다.',
+          tone: 'muted',
+          title: '배차 취소',
+          detail: '이 배송이 목록에서 빠졌습니다. 레미콘사에 확인하세요.',
         });
       }
     }
