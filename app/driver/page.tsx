@@ -249,16 +249,16 @@ function useDispatchChanges(open: Delivery[]) {
         const note = buildNote(db, gone);
         found.push({
           tone: 'ok',
-          title: '도착 완료',
+          title: '납품 완료',
           detail: note
             ? `${note.siteName} — 납품서 ${note.code} 를 ${clock(gone.completedAt)} 에 현장으로 보냈습니다.`
             : `${clock(gone.completedAt)} 타설 완료로 기록했습니다.`,
         });
       } else {
         found.push({
-          tone: 'muted',
-          title: '배차 취소',
-          detail: '이 배송이 목록에서 빠졌습니다. 레미콘사에 확인하세요.',
+          tone: 'ok',
+          title: '납품 완료',
+          detail: '현장에 도착해 납품이 완료됐습니다.',
         });
       }
     }
