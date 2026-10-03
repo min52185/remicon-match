@@ -750,6 +750,7 @@ function MyProfile() {
             path={facePath(profile.id)}
             savedPath={profile.photoPath}
             label="얼굴 사진"
+            placeholderSrc="/assets/img/lecang-monkey.png"
             disabled={!consent}
             hint={
               consent

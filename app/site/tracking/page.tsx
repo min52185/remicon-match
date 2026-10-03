@@ -287,7 +287,7 @@ function DeliveryCard({ d, pos, now }: { d: Delivery; pos: Position; now: number
       </p>
 
       {/* 누가 오는지 — 게이트에서 본인 확인에 쓴다 */}
-      {truck?.facePath && <DriverFace path={truck.facePath} name={truck.driver} />}
+      <DriverFace name={truck?.driver} />
 
       {phase !== 'done' && (
         <div style={{ marginBottom: 8 }}>
@@ -388,7 +388,7 @@ function ProgressBar({
  * 문제가 생기는 것은 아니다.
  * ======================================================================== */
 
-function usePhotoUrl(kind: 'face' | 'note', path: string) {
+function usePhotoUrl(kind: 'note', path: string) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
@@ -400,16 +400,14 @@ function usePhotoUrl(kind: 'face' | 'note', path: string) {
   return url;
 }
 
-function DriverFace({ path, name }: { path: string; name?: string }) {
-  const url = usePhotoUrl('face', path);
-  if (!url) return null;
+/** 기사 사진 자리 — 지금은 모든 기사에게 레숭이를 보여 준다 */
+function DriverFace({ name }: { name?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}>
-      {/* 기사가 올린 사진이라 크기를 알 수 없다 */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={url}
-        alt={`${name ?? '기사'} 얼굴 사진`}
+        src="/assets/img/lecang-monkey.png"
+        alt={`${name ?? '기사'} 사진`}
         style={{
           width: 44,
           height: 44,
