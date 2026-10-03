@@ -6,13 +6,17 @@
  */
 
 import { NextResponse } from 'next/server';
-import { approximateTemperature, type Temperature } from '@/lib/services/weather';
+import {
+  approximateTemperature,
+  kstEpoch,
+  kstParts,
+  kstYmd,
+  latestBase,
+  type Temperature,
+} from '@/lib/services/weather';
 
 const ENDPOINT =
   'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst';
-
-/** 단기예보 발표 시각 (매일 8회) */
-const BASE_TIMES = ['2300', '2000', '1700', '1400', '1100', '0800', '0500', '0200'];
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -45,7 +49,7 @@ interface KmaItem {
 
 async function fetchKma(key: string, lat: number, lng: number, at: number): Promise<Temperature> {
   const { nx, ny } = toGrid(lat, lng);
-  const { baseDate, baseTime } = latestBase(new Date());
+  const { baseDate, baseTime } = latestBase(Date.now());
 
   const params = new URLSearchParams({
     serviceKey: key,
@@ -71,10 +75,10 @@ async function fetchKma(key: string, lat: number, lng: number, at: number): Prom
   const items = (json.response?.body?.items?.item ?? []).filter((i) => i.category === 'TMP');
   if (items.length === 0) throw new Error('TMP 항목 없음');
 
-  // 타설 시각에 가장 가까운 예보를 고른다
-  const target = new Date(at);
-  const wanted = `${target.getFullYear()}${p2(target.getMonth() + 1)}${p2(target.getDate())}`;
-  const wantedHour = `${p2(target.getHours())}00`;
+  // 타설 시각에 가장 가까운 예보를 고른다. 기상청이 한국시각으로 말하므로
+  // 찾는 날짜·시각도 한국시각이라야 한다 (서버가 UTC 여도).
+  const wanted = kstYmd(at);
+  const wantedHour = `${p2(kstParts(at).hour)}00`;
 
   const exact = items.find((i) => i.fcstDate === wanted && i.fcstTime === wantedHour);
   const chosen = exact ?? nearest(items, at);
@@ -100,27 +104,10 @@ function nearest(items: KmaItem[], at: number) {
   return best;
 }
 
-const parseFcst = (i: KmaItem) =>
-  new Date(
-    Number(i.fcstDate.slice(0, 4)),
-    Number(i.fcstDate.slice(4, 6)) - 1,
-    Number(i.fcstDate.slice(6, 8)),
-    Number(i.fcstTime.slice(0, 2)),
-  ).getTime();
-
-/** 지금 시각에서 쓸 수 있는 가장 최근 발표분. 발표 후 10분 정도 지나야 값이 올라온다. */
-function latestBase(now: Date) {
-  const d = new Date(now.getTime() - 45 * 60_000);
-  const hhmm = `${p2(d.getHours())}${p2(d.getMinutes())}`;
-  const found = BASE_TIMES.find((t) => t <= hhmm);
-  if (found) return { baseDate: ymd(d), baseTime: found };
-  // 02시 이전이면 어제 23시 발표분
-  const y = new Date(d.getTime() - 24 * 3600_000);
-  return { baseDate: ymd(y), baseTime: '2300' };
-}
+/** 예보 한 줄의 시각(한국시각)을 epoch 으로 */
+const parseFcst = (i: KmaItem) => kstEpoch(i.fcstDate, Number(i.fcstTime.slice(0, 2)));
 
 const p2 = (n: number) => String(n).padStart(2, '0');
-const ymd = (d: Date) => `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
 
 /**
  * 위경도 → 기상청 격자(nx, ny). 람베르트 정각원추도법.
