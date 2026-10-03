@@ -16,7 +16,7 @@
  *   CSV 내려받기  그날 전체를 표로 — 엑셀에서 열어 정산에 쓴다
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SiteShell } from '@/components/RoleShells';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import {
@@ -30,6 +30,7 @@ import { clock, dateClock, m3 } from '@/lib/format';
 import { ORDER_STATUS_LABEL, ORDER_TONE, cementShort } from '@/lib/rules';
 import { photoUrl } from '@/lib/services/photos';
 import { ordersOfSite, setOrderStatus } from '@/lib/store';
+import PrintArea from '@/components/PrintArea';
 import { useDb, useMounted } from '@/lib/store/hooks';
 import { useSeenNotes } from '@/lib/useSeenNotes';
 import type { Site } from '@/lib/types';
@@ -55,6 +56,13 @@ function NotesBody({ site }: { site: Site }) {
   const notes = useMemo(() => notesOfSite(db, site.id), [db, site.id]);
   const days = useMemo(() => groupByDay(notes), [notes]);
   const { freshCount, isFresh } = useSeenNotes(site.id, notes);
+
+  /**
+   * 지금 인쇄(PDF 저장)할 납품서.
+   * 한 장일 수도 있고 하루치 전부일 수도 있다 — 담는 것만 다르고 길은 같다.
+   */
+  const [printing, setPrinting] = useState<DeliveryNote[] | null>(null);
+  const stopPrinting = useCallback(() => setPrinting(null), []);
 
   if (!mounted) return <Empty>불러오는 중…</Empty>;
 
@@ -95,11 +103,24 @@ function NotesBody({ site }: { site: Site }) {
             openId={openId}
             onToggle={(id) => setOpenId(openId === id ? null : id)}
             isFresh={isFresh}
+            onPrint={setPrinting}
           />
         ))
       )}
 
       <OrderHistory site={site} />
+
+      {/*
+        인쇄용 묶음. 화면에는 안 보이고, 인쇄할 때만 이것만 나간다.
+        한 장이 한 쪽으로 떨어지도록 print-page 를 두른다.
+      */}
+      <PrintArea active={printing != null} onDone={stopPrinting}>
+        {(printing ?? []).map((n) => (
+          <div key={n.deliveryId} className="print-page">
+            <NoteSheet note={n} forPrint />
+          </div>
+        ))}
+      </PrintArea>
     </>
   );
 }
@@ -193,12 +214,14 @@ function DaySection({
   openId,
   onToggle,
   isFresh,
+  onPrint,
 }: {
   day: NoteDay;
   siteName: string;
   openId: string | null;
   onToggle: (id: string) => void;
   isFresh: (code: string) => boolean;
+  onPrint: (notes: DeliveryNote[]) => void;
 }) {
   function download() {
     const csv = notesToCsv(day.notes);
@@ -232,20 +255,26 @@ function DaySection({
             fresh={isFresh(n.code)}
             open={openId === n.deliveryId}
             onToggle={() => onToggle(n.deliveryId)}
+            onPrint={onPrint}
           />
         ))}
       </div>
 
-      <button
-        type="button"
-        className="btn btn-outline btn-sm btn-block no-print"
-        style={{ marginTop: 12 }}
-        onClick={download}
-      >
-        이 날짜 {day.notes.length}장 내려받기 (CSV)
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm no-print"
+          style={{ flex: 1 }}
+          onClick={() => onPrint(day.notes)}
+        >
+          이 날짜 {day.notes.length}장 PDF
+        </button>
+        <button type="button" className="btn btn-outline btn-sm no-print" style={{ flex: 1 }} onClick={download}>
+          CSV 내려받기
+        </button>
+      </div>
       <p style={{ fontSize: '0.76rem', color: 'var(--color-concrete-mid)', margin: '8px 0 0' }}>
-        엑셀에서 바로 열립니다. 정산·품질 기록으로 쓰세요.
+        PDF 는 한 장이 한 쪽으로 나갑니다. CSV 는 엑셀에서 바로 열려 정산에 씁니다.
       </p>
     </Panel>
   );
@@ -260,12 +289,14 @@ function NoteCard({
   fresh,
   open,
   onToggle,
+  onPrint,
 }: {
   note: DeliveryNote;
   /** 이번에 처음 보는 확정 납품서인가 */
   fresh: boolean;
   open: boolean;
   onToggle: () => void;
+  onPrint: (notes: DeliveryNote[]) => void;
 }) {
   return (
     // 인쇄할 때는 펼쳐 놓은 한 장만 나가게 한다
@@ -303,7 +334,7 @@ function NoteCard({
         </div>
       </button>
 
-      {open && <NoteSheet note={note} />}
+      {open && <NoteSheet note={note} onPrint={onPrint} />}
     </article>
   );
 }
@@ -343,7 +374,16 @@ const MIX_COLUMNS = [
  * 칸 배치는 현장에서 받는 종이 레디믹스트 콘크리트 납품서(KS F 4009)를 따른다.
  * 현장 사무는 종이 양식에 눈이 익어 있어서, 같은 칸이 같은 자리에 있어야 바로 읽는다.
  */
-function NoteSheet({ note }: { note: DeliveryNote }) {
+function NoteSheet({
+  note,
+  forPrint,
+  onPrint,
+}: {
+  note: DeliveryNote;
+  /** 인쇄 묶음 안에서 그려지는 중 — 단추를 빼고 그림만 남긴다 */
+  forPrint?: boolean;
+  onPrint?: (notes: DeliveryNote[]) => void;
+}) {
   return (
     <div>
       <div className={ns.sheet}>
@@ -495,14 +535,20 @@ function NoteSheet({ note }: { note: DeliveryNote }) {
         기준). 책임기술자 승인이나 응결지연제 사용 시 달라질 수 있습니다.
       </p>
 
-      <button
-        type="button"
-        className="btn btn-outline btn-sm no-print"
-        style={{ marginTop: 12 }}
-        onClick={() => window.print()}
-      >
-        이 납품서 인쇄 · PDF 저장
-      </button>
+      {/*
+        인쇄 묶음 안에서는 단추를 뺀다. 거기서는 이미 인쇄 중이고,
+        종이에 단추가 찍힐 이유도 없다.
+      */}
+      {!forPrint && (
+        <button
+          type="button"
+          className="btn btn-outline btn-sm no-print"
+          style={{ marginTop: 12 }}
+          onClick={() => onPrint?.([note])}
+        >
+          이 납품서만 PDF 로 저장
+        </button>
+      )}
     </div>
   );
 }
