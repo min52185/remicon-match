@@ -6,6 +6,20 @@
   font-family: inherit;
 }
 
+/* 앱 화면 안 — 하단 탭(60px)을 가리지 않게 그 위에 띄운다 */
+.docked {
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  right: 14px;
+}
+
+.docked .mascot {
+  width: 58px;
+}
+
+.docked .panel {
+  height: min(460px, calc(100vh - 150px));
+}
+
 .launcher {
   position: relative;
 }
@@ -137,6 +151,49 @@
   border-radius: 4px 14px 14px 14px;
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.messages > * + * {
+  margin-top: 10px;
+}
+
+.botMsg {
+  white-space: pre-line;
+}
+
+.userMsg {
+  display: block;
+  width: fit-content;
+  max-width: 86%;
+  margin: 0 0 0 auto;
+  padding: 9px 13px;
+  background: var(--color-concrete-dark);
+  color: var(--color-paper);
+  border-radius: 14px 4px 14px 14px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.typing {
+  color: var(--color-concrete-mid);
+}
+
+/* 처음 열었을 때 바로 누를 수 있는 질문 */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.suggestions button {
+  padding: 6px 10px;
+  border: 1px solid var(--color-rust);
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-rust);
+  font-size: 0.8rem;
+  cursor: pointer;
 }
 
 .inputRow {

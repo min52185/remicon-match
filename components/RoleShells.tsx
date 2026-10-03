@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import AppShell from './AppShell';
+import ChatBot from './ChatBot';
 import {
   IconDoc,
   IconFactory,
@@ -194,7 +195,11 @@ export function SiteShell({ title, description, showClock, children, empty }: Sh
       }
     >
       {site ? (
-        children(site)
+        <>
+          {children(site)}
+          {/* 레캉쌤 — 이 현장의 배송·공장·급처 매물을 보고 답한다 */}
+          <ChatBot site={site} />
+        </>
       ) : !demoMode && mine.length > 0 ? (
         // 회사에 현장은 있는데 아직 안 골랐다. 등록하라고 하면 엉뚱한 현장이 하나 더 생긴다
         <PickSite options={mine} />
