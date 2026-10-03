@@ -130,6 +130,10 @@ function OfferCard({
           urgent: true,
           urgentReason: memo.urgentReason,
           note: memo.note,
+          // 공장이 이미 비벼 둔 것이다. 배차할 때 이 시각부터 제한시간을 재야
+          // 한다 — 지금 비비기 시작한 것으로 찍으면 없는 여유가 생긴다.
+          surplusId: l.id,
+          mixStartedAt: l.mixStartAt,
         },
         now,
       );

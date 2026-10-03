@@ -159,7 +159,8 @@ function PendingCard({ order, plant }: { order: Order; plant: Plant }) {
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
         <strong style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>{order.code}</strong>
-        {order.urgent && <Tag tone="bad">긴급</Tag>}
+        {/* 급처는 내가 내놓은 매물이 팔린 것이라 보통 긴급과 성격이 다르다 */}
+        {order.surplusId ? <Tag tone="accent">급처 매물</Tag> : order.urgent && <Tag tone="bad">긴급</Tag>}
         <span style={{ marginLeft: 'auto' }}>
           <Tag tone={worst}>
             {worst === 'ok' ? '수락 가능' : worst === 'warn' ? '확인 필요' : '수락 어려움'}
@@ -167,12 +168,31 @@ function PendingCard({ order, plant }: { order: Order; plant: Plant }) {
         </span>
       </div>
 
-      {order.urgent && (
+      {order.surplusId ? (
         <div style={{ marginBottom: 10 }}>
-          <Alert tone="bad" title="현장 사유">
-            {order.urgentReason ?? '현장 요청'}
+          {/*
+            이미 비벼 둔 물건이라 시계가 벌써 돌고 있다. 공장이 가장 먼저 알아야
+            할 것은 가격이 아니라 "언제까지 부어야 하는가" 다.
+          */}
+          <Alert tone="accent" title="내가 내놓은 급처 매물이 팔렸습니다">
+            {order.urgentReason ?? '급처 매물'}
+            {order.mixStartedAt != null && (
+              <>
+                <br />
+                <strong>비비기 {clock(order.mixStartedAt)}</strong> 에 시작한 물건입니다. 제한시간은
+                그때부터 재므로, 출하 지시를 눌러도 시계는 다시 시작하지 않습니다.
+              </>
+            )}
           </Alert>
         </div>
+      ) : (
+        order.urgent && (
+          <div style={{ marginBottom: 10 }}>
+            <Alert tone="bad" title="현장 사유">
+              {order.urgentReason ?? '현장 요청'}
+            </Alert>
+          </div>
+        )
       )}
 
       <Row label="현장">{site?.name}</Row>
