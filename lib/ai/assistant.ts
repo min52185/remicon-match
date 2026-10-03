@@ -393,6 +393,64 @@ function deliveryLine(d: DeliveryFact): string {
 
 const EXAMPLES = '"아까 주문한 거 왜 안 와요?", "근처 공장 어때?", "급처 매물 있어?", "슬럼프가 뭐예요?"';
 
+/* ==========================================================================
+ * 이어서 물어볼 질문
+ *
+ * 답한 뒤 입력칸 위에 띄운다. 여기 적는 질문은 전부 위의 classify 가 알아듣고
+ * 키 없이 답할 수 있는 것이어야 한다 — 누른 추천 질문에 "답하기 어려워요"가
+ * 나오면 안 된다. 테스트가 그것을 지킨다.
+ * ======================================================================== */
+
+export const SITE_STARTERS = ['아까 주문한 거 왜 안 와요?', '지금 근처 공장들 어때?', '급처 매물 있어?'];
+export const GENERAL_STARTERS = ['슬럼프가 뭐예요?', '제한시간이 뭐예요?', '콜드조인트가 뭐야?'];
+
+/** 지식 질문 다음에 이어 물을 것 — 내 현장 질문은 현장이 있을 때만 쓴다 */
+const FAQ_NEXT: Record<string, { general: string[]; site?: string[] }> = {
+  flow: { general: ['슬럼프가 뭐예요?', '규격 읽는 법 알려줘'] },
+  slump: { general: ['슬럼프 플로가 뭐야?', '규격 읽는 법 알려줘', '제한시간이 뭐예요?'] },
+  spec: { general: ['슬럼프가 뭐예요?', '슬럼프 플로가 뭐야?'], site: ['지금 근처 공장들 어때?'] },
+  coldjoint: { general: ['제한시간이 뭐예요?', '양생이 뭐야?'], site: ['콜드조인트 괜찮아?'] },
+  limit: { general: ['콜드조인트가 뭐야?', '긴급주문이 뭐야?'], site: ['지금 근처 공장들 어때?'] },
+  curing: { general: ['콜드조인트가 뭐야?', '슬럼프가 뭐예요?'] },
+  surplus: { general: ['제한시간이 뭐예요?'], site: ['급처 매물 있어?', '지금 근처 공장들 어때?'] },
+  allocate: { general: ['긴급주문이 뭐야?', '주문은 어떻게 해?'], site: ['지금 근처 공장들 어때?'] },
+  urgent: { general: ['AI 배분이 뭐야?', '제한시간이 뭐예요?'], site: ['지금 근처 공장들 어때?'] },
+  note: { general: ['즐겨찾기는 어떻게 써?', '주문은 어떻게 해?'], site: ['주문 상태 알려줘'] },
+  favorite: { general: ['주문은 어떻게 해?', '납품서가 뭐야?'] },
+  howto: { general: ['즐겨찾기는 어떻게 써?', '긴급주문이 뭐야?', 'AI 배분이 뭐야?'] },
+};
+
+/**
+ * 방금 한 질문에 이어 물을 만한 질문 3개.
+ * 같은 질문은 다시 권하지 않는다.
+ */
+export function followUps(question: string, c: SiteContext | null): string[] {
+  const intent = classify(question);
+  const q = normalize(question);
+  const firstTruck = c?.deliveries[0]?.truck;
+
+  let next: string[];
+  if (intent === 'faq') {
+    const f = FAQ_NEXT[findFaq(q)!.id];
+    next = [...(c && f.site ? f.site : []), ...f.general];
+  } else if (!c || intent === 'smalltalk' || intent === 'general') {
+    next = c ? SITE_STARTERS : GENERAL_STARTERS;
+  } else {
+    const byIntent: Record<string, string[]> = {
+      delivery: [firstTruck ? `${firstTruck} 어디야?` : '주문 상태 알려줘', '타설 끊길 것 같아?', '제한시간이 뭐예요?'],
+      truck: ['다른 차는 언제 와?', '콜드조인트 괜찮아?', '제한시간이 뭐예요?'],
+      order: ['아까 주문한 거 왜 안 와요?', '지금 근처 공장들 어때?', '긴급주문이 뭐야?'],
+      pour: ['콜드조인트가 뭐야?', '아까 주문한 거 왜 안 와요?', '급처 매물 있어?'],
+      surplus: ['급처가 뭐야?', '지금 근처 공장들 어때?', '제한시간이 뭐예요?'],
+      plants: ['급처 매물 있어?', 'AI 배분이 뭐야?', '긴급주문이 뭐야?'],
+    };
+    next = byIntent[intent];
+  }
+
+  const asked = normalize(question);
+  return next.filter((x) => normalize(x) !== asked).slice(0, 3);
+}
+
 /**
  * 키 없이 답한다. 현장이 없으면(첫 화면) 일반 지식만 답한다.
  */

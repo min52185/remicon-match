@@ -7,7 +7,10 @@ import {
   buildSiteContext,
   classify,
   contextBlock,
+  followUps,
+  GENERAL_STARTERS,
   offlineAnswer,
+  SITE_STARTERS,
   templateAnswer,
   type SiteContext,
 } from '../lib/ai/assistant';
@@ -112,6 +115,87 @@ describe('질문 종류 가리기', () => {
     ['오늘 점심 뭐 먹지', 'general'],
   ])('%s → %s', (q, intent) => {
     expect(classify(q)).toBe(intent);
+  });
+});
+
+describe('이어서 물어볼 질문', () => {
+  const site: SiteContext = {
+    site: '서천동 현장',
+    now: '09:00',
+    tempC: 20,
+    limitMinutes: 120,
+    orders: [],
+    deliveries: [],
+    pours: [],
+    plants: [],
+    surplus: [],
+  };
+  const SITE_INTENTS = ['truck', 'order', 'delivery', 'pour', 'surplus', 'plants'];
+
+  /** 지금까지 나올 수 있는 질문 전부 — 추천을 따라가며 모은다 */
+  function reachable(c: SiteContext | null) {
+    const seen = new Set<string>();
+    const queue = [...(c ? SITE_STARTERS : GENERAL_STARTERS), '슬럼프', '안녕', '점심 뭐 먹지'];
+    while (queue.length > 0) {
+      const q = queue.shift()!;
+      if (seen.has(q)) continue;
+      seen.add(q);
+      queue.push(...followUps(q, c));
+    }
+    return seen;
+  }
+
+  it('추천 질문은 누르면 반드시 알아듣는 질문이다 — "답하기 어려워요"가 나오지 않는다', () => {
+    for (const c of [site, null]) {
+      for (const q of reachable(c)) {
+        for (const next of followUps(q, c)) {
+          expect(classify(next), `${q} → ${next}`).not.toBe('general');
+        }
+      }
+    }
+  });
+
+  it('현장이 없으면 내 현장 질문을 권하지 않는다', () => {
+    for (const q of reachable(null)) {
+      for (const next of followUps(q, null)) {
+        expect(SITE_INTENTS, `${q} → ${next}`).not.toContain(classify(next));
+      }
+    }
+  });
+
+  it('방금 한 질문을 다시 권하지 않고, 많아야 3개다', () => {
+    const next = followUps('급처 매물 있어?', site);
+    expect(next).not.toContain('급처 매물 있어?');
+    expect(next.length).toBeLessThanOrEqual(3);
+    expect(next.length).toBeGreaterThan(0);
+  });
+
+  it('오는 차가 있으면 그 차를 콕 집어 묻게 한다', () => {
+    const withTruck: SiteContext = {
+      ...site,
+      deliveries: [
+        {
+          truck: '3호차',
+          plant: '',
+          spec: '',
+          phase: '운반 중',
+          eta: '09:20',
+          etaInMin: 20,
+          remainingKm: 9,
+          delay: '',
+          delayMin: 0,
+          limitSlackMin: 60,
+          limitMinutes: 120,
+          level: 'ok',
+        },
+      ],
+    };
+    expect(followUps('왜 안 와요', withTruck)).toContain('3호차 어디야?');
+  });
+
+  it('지식 질문 다음에는 관련 지식을 권한다', () => {
+    expect(followUps('슬럼프가 뭐예요?', null)).toContain('슬럼프 플로가 뭐야?');
+    expect(followUps('콜드조인트가 뭐야?', site)).toContain('콜드조인트 괜찮아?');
   });
 });
 

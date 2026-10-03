@@ -179,14 +179,28 @@
   color: var(--color-concrete-mid);
 }
 
-/* 처음 열었을 때 바로 누를 수 있는 질문 */
+/* 입력칸 위에 늘 있는 추천 질문 — 한 줄로 두고 옆으로 민다 (대화 칸을 덜 잡아먹게) */
 .suggestions {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
+  padding: 8px 10px 0;
+  overflow-x: auto;
+  background: var(--color-card);
+  border-top: 1px solid var(--color-line);
+  scrollbar-width: none;
+}
+
+.suggestions::-webkit-scrollbar {
+  display: none;
+}
+
+.suggestions + .inputRow {
+  border-top: 0;
 }
 
 .suggestions button {
+  flex: none;
+  white-space: nowrap;
   padding: 6px 10px;
   border: 1px solid var(--color-rust);
   border-radius: 999px;
@@ -194,6 +208,11 @@
   color: var(--color-rust);
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+.suggestions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .inputRow {
