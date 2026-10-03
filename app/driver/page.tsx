@@ -249,7 +249,7 @@ function useDispatchChanges(open: Delivery[]) {
         const note = buildNote(db, gone);
         found.push({
           tone: 'ok',
-          title: '도착 완료',
+          title: '납품 완료',
           detail: note
             ? `${note.siteName} — 납품서 ${note.code} 를 ${clock(gone.completedAt)} 에 현장으로 보냈습니다.`
             : `${clock(gone.completedAt)} 타설 완료로 기록했습니다.`,
