@@ -446,6 +446,22 @@
   transition: transform 0.6s ease-out;
 }
 
+/* 기사 사진이 있으면 점·화살표 대신 동그란 사진 */
+.rmc-marker .rmc-avatar {
+  width: 30px;
+  height: 30px;
+  margin: -6px 0 -6px -4px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--color-paper);
+  border: 2px solid var(--color-paper);
+  flex: none;
+}
+
+.rmc-marker[data-avatar='1'] .dot {
+  display: none;
+}
+
 .rmc-marker[data-kind='truck'][data-heading='1'] {
   /* 운행 중인 내 차는 한눈에 찾혀야 한다 */
   border-color: var(--color-rust);

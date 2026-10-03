@@ -23,17 +23,21 @@ import type {
   OrderStatus,
   Plant,
   Site,
+  SurplusListing,
   Truck,
   TruckLocation,
 } from '../types';
+import { isLive } from '../surplus';
 import { SEED_PLANTS, SEED_SITES, SEED_TRUCKS } from './seed';
 import {
   emptyDb as blankDb,
+  SurplusGoneError,
   type Db,
   type DispatchInput,
   type NewOrder,
   type NewPlant,
   type NewSite,
+  type NewSurplus,
   type NewTruck,
 } from './shared';
 
@@ -380,6 +384,57 @@ export async function pushLocation(loc: TruckLocation) {
   }));
 }
 
+
+/* ==========================================================================
+ * 쓰기 — 급처 매물
+ * ======================================================================== */
+
+export async function createSurplus(input: NewSurplus): Promise<SurplusListing> {
+  ensureHydrated();
+  const listing: SurplusListing = {
+    ...input,
+    id: `L${Date.now().toString(36)}`,
+    status: 'open',
+    createdAt: Date.now(),
+  };
+  commit({ ...db, surplus: [...db.surplus, listing] });
+  return listing;
+}
+
+/** 공장이 매물을 내린다 — 가져간 뒤에는 못 내린다 */
+export async function withdrawSurplus(listingId: string) {
+  update((d) => ({
+    ...d,
+    surplus: d.surplus.map((l) =>
+      l.id === listingId && l.status === 'open' ? { ...l, status: 'withdrawn' } : l,
+    ),
+  }));
+}
+
+/**
+ * 현장이 매물을 가져간다 — 매물을 잠그고, 그 공장으로 주문을 보낸다.
+ * 두 현장이 같은 매물을 동시에 누르면 먼저 잠근 쪽만 가져간다.
+ */
+export async function claimSurplus(
+  listingId: string,
+  siteId: string,
+  order: NewOrder,
+  now: number,
+): Promise<Order> {
+  ensureHydrated();
+  const listing = db.surplus.find((l) => l.id === listingId);
+  if (!listing || !isLive(listing, now)) throw new SurplusGoneError();
+
+  commit({
+    ...db,
+    surplus: db.surplus.map((l) =>
+      l.id === listingId
+        ? { ...l, status: 'claimed', claimedSiteId: siteId, claimedAt: Date.now() }
+        : l,
+    ),
+  });
+  return createOrder(order);
+}
 
 /* ==========================================================================
  * 기사 ↔ 차량 배정 (시연 모드)

@@ -12,6 +12,7 @@ import type {
   Order,
   Plant,
   Site,
+  SurplusListing,
   Truck,
   TruckLocation,
 } from '../types';
@@ -25,6 +26,8 @@ export interface Db {
   plans: AllocationPlan[];
   deliveries: Delivery[];
   truckLocations: TruckLocation[];
+  /** 급처 매물 */
+  surplus: SurplusListing[];
   /** 주문번호 채번용 */
   orderSeq: number;
   /** 처음 읽기가 끝났는가 — Supabase 모드에서 '불러오는 중'을 구분하려고 둔다 */
@@ -40,11 +43,26 @@ export const emptyDb = (): Db => ({
   plans: [],
   deliveries: [],
   truckLocations: [],
+  surplus: [],
   orderSeq: 1,
   loaded: false,
 });
 
 export type NewOrder = Omit<Order, 'id' | 'code' | 'status' | 'createdAt'>;
+
+/** 급처 매물 올리기 입력 */
+export type NewSurplus = Omit<
+  SurplusListing,
+  'id' | 'status' | 'claimedSiteId' | 'claimedAt' | 'createdAt'
+>;
+
+/** 이미 누가 가져갔거나 시한이 지난 매물을 가져가려 할 때 */
+export class SurplusGoneError extends Error {
+  constructor() {
+    super('이미 다른 현장이 가져갔거나 시한이 지난 매물입니다.');
+    this.name = 'SurplusGoneError';
+  }
+}
 
 export interface DispatchInput {
   order: Order;

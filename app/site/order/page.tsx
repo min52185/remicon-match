@@ -15,6 +15,7 @@ import TempNow from '@/components/TempNow';
 import PlanAreaCalculator from '@/components/PlanAreaCalculator';
 import { SiteShell } from '@/components/RoleShells';
 import SpecPicker from '@/components/SpecPicker';
+import SurplusDeals from '@/components/SurplusDeals';
 import UrgentRequest from '@/components/UrgentRequest';
 import { Empty, MockNotice, Panel, Row, Tag } from '@/components/ui';
 import { ago, duration, failure, fromLocalInput, m3, toLocalInput } from '@/lib/format';
@@ -246,6 +247,9 @@ function OrderBody({ site }: { site: Site }) {
           </p>
         </Panel>
       )}
+
+      {/* 급처 매물 — 공장이 싸게 내놓은 이미 비빈 레미콘. 매물이 없으면 안 보인다 */}
+      <SurplusDeals site={site} />
 
       {/* 즐겨찾기 빠른 선택 */}
       {favorites.length > 0 && (

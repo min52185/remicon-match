@@ -20,6 +20,9 @@ import type {
   PlantCapability,
   Site,
   Spec,
+  SurplusListing,
+  SurplusReason,
+  SurplusStatus,
   Truck,
   TruckLocation,
 } from '../types';
@@ -103,6 +106,25 @@ export interface OrderRow {
   note: string | null;
   urgent: boolean | null;
   urgent_reason: string | null;
+  created_at: string;
+}
+
+/** 0012_surplus.sql */
+export interface SurplusRow {
+  id: string;
+  plant_id: string;
+  reason: SurplusReason;
+  spec: Spec;
+  volume_m3: number;
+  mix_start_at: string;
+  limit_minutes: number;
+  temp_c: number;
+  unit_price: number;
+  discount_pct: number;
+  note: string | null;
+  status: SurplusStatus;
+  claimed_site_id: string | null;
+  claimed_at: string | null;
   created_at: string;
 }
 
@@ -250,6 +272,24 @@ export const toOrder = (r: OrderRow): Order => ({
   createdAt: msReq(r.created_at),
 });
 
+export const toSurplus = (r: SurplusRow): SurplusListing => ({
+  id: r.id,
+  plantId: r.plant_id,
+  reason: r.reason,
+  spec: r.spec,
+  volumeM3: Number(r.volume_m3),
+  mixStartAt: msReq(r.mix_start_at),
+  limitMinutes: Number(r.limit_minutes),
+  tempC: Number(r.temp_c),
+  unitPrice: Number(r.unit_price),
+  discountPct: Number(r.discount_pct),
+  note: r.note ?? undefined,
+  status: r.status,
+  claimedSiteId: r.claimed_site_id ?? undefined,
+  claimedAt: r.claimed_at ? msReq(r.claimed_at) : undefined,
+  createdAt: msReq(r.created_at),
+});
+
 export const toPlanItem = (r: PlanItemRow, plantName: string): AllocationItem => ({
   plantId: r.plant_id,
   plantName,
@@ -328,6 +368,23 @@ export const orderInsert = (o: Omit<Order, 'id' | 'createdAt'>, createdBy: strin
   note: o.note ?? null,
   urgent: o.urgent ?? false,
   urgent_reason: o.urgentReason ?? null,
+  created_by: createdBy,
+});
+
+export const surplusInsert = (
+  l: Omit<SurplusListing, 'id' | 'status' | 'claimedSiteId' | 'claimedAt' | 'createdAt'>,
+  createdBy: string | null,
+) => ({
+  plant_id: l.plantId,
+  reason: l.reason,
+  spec: l.spec,
+  volume_m3: l.volumeM3,
+  mix_start_at: iso(l.mixStartAt),
+  limit_minutes: l.limitMinutes,
+  temp_c: l.tempC,
+  unit_price: l.unitPrice,
+  discount_pct: l.discountPct,
+  note: l.note ?? null,
   created_by: createdBy,
 });
 

@@ -137,6 +137,40 @@ export interface Order {
   urgentReason?: string;
 }
 
+/** 급처 사유 — 현장이 주문을 취소했거나, 출하하고 남았거나 */
+export type SurplusReason = 'cancelled' | 'leftover';
+
+export type SurplusStatus = 'open' | 'claimed' | 'withdrawn';
+
+/**
+ * surplus_listings — 공장이 올린 급처 매물.
+ *
+ * 이미 비빈 레미콘이라 비비기~타설 제한시간 안에 현장에 닿아야 쓸 수 있다.
+ * 버리면 공장 손실이라 정상 단가보다 싸게 내놓는다.
+ */
+export interface SurplusListing {
+  id: string;
+  plantId: string;
+  reason: SurplusReason;
+  spec: Spec;
+  volumeM3: number;
+  /** 비비기 시작 — 제한시간을 여기서부터 잰다 */
+  mixStartAt: number;
+  /** 비비기~타설 완료 제한 (90 또는 120분) — 올릴 때의 외기온도로 정한다 */
+  limitMinutes: number;
+  tempC: number;
+  /** 정상 단가 (원/m³) */
+  unitPrice: number;
+  /** 할인율 (%) */
+  discountPct: number;
+  note?: string;
+  status: SurplusStatus;
+  /** 가져간 현장 */
+  claimedSiteId?: string;
+  claimedAt?: number;
+  createdAt: number;
+}
+
 /** allocation_plans — AI 배분 1회 = 1행 */
 export interface AllocationPlan {
   id: string;

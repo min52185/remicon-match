@@ -301,6 +301,99 @@
   border-radius: var(--radius-sharp);
 }
 
+/* ---------- 요금제 ---------- */
+.pricingLead {
+  margin: -24px 0 36px;
+  color: var(--color-concrete-wet);
+  font-size: 0.95rem;
+  max-width: 560px;
+}
+
+.planGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 760px) {
+  .planGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.planCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: var(--color-card);
+  border: 1px solid var(--color-line);
+  padding: 28px 24px;
+}
+
+.planRecommended {
+  border: 2px solid var(--color-rust);
+}
+
+/* 배지가 제목을 밀어내지 않게 모서리에 띄운다 — 세 카드의 제목 높이를 맞춘다 */
+.planBadge {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+}
+
+/* 기능 수가 달라도 버튼은 카드 바닥에 맞춘다 */
+.planCta {
+  margin-top: auto;
+}
+
+.planCard h3 {
+  font-size: 1.2rem;
+  margin: 10px 0 4px;
+}
+
+.planTarget {
+  margin: 0;
+  color: var(--color-concrete-mid);
+  font-size: 0.88rem;
+}
+
+.planPrice {
+  margin: 18px 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.planFeatures {
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 16px 0 0;
+  width: 100%;
+  border-top: 1px solid var(--color-line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.92rem;
+  color: var(--color-concrete-wet);
+}
+
+.planFeatures li::before {
+  content: '✓ ';
+  color: var(--color-rust);
+  font-weight: 700;
+}
+
+/* ---------- 요금제 신청 ---------- */
+.subscribeWrap {
+  max-width: 560px;
+}
+
+.subscribeNote {
+  margin: 0 0 20px;
+  font-size: 0.88rem;
+  color: var(--color-concrete-mid);
+}
+
 /* ---------- 역할 선택 ---------- */
 .roleGrid {
   display: grid;

@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import ChatBot from '@/components/ChatBot';
+import { PLANS } from '@/lib/plans';
 import s from './landing.module.css';
 
 const PROCESS = [
@@ -64,6 +66,7 @@ export default function LandingPage() {
           </Link>
           <nav className={s.nav} aria-label="주요 메뉴">
             <a href="#process">소개</a>
+            <a href="#pricing">요금제</a>
             <Link href="/site/order">주문</Link>
             <Link href="/site/tracking">배송 추적</Link>
             <Link href="/site/allocate">AI 배분</Link>
@@ -169,7 +172,42 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* 5. 역할 선택 */}
+        {/* 5. 요금제 */}
+        <section className={s.section} id="pricing">
+          <div className="wrap">
+            <p className={s.sectionEyebrow}>PRICING</p>
+            <h2 className={s.sectionTitle}>현장 규모에 맞춰, 세 가지 구독</h2>
+            <p className={s.pricingLead}>
+              한 번 결제하면 정해진 기간 동안 주문 횟수 제한 없이 씁니다. 레미콘사는 무료로 입점합니다.
+            </p>
+            <div className={s.planGrid}>
+              {PLANS.map((p) => (
+                <article
+                  key={p.id}
+                  className={`${s.planCard} ${p.recommended ? s.planRecommended : ''}`}
+                >
+                  {p.recommended && <span className={`${s.whyTag} ${s.planBadge}`}>추천</span>}
+                  <h3>{p.name}</h3>
+                  <p className={s.planTarget}>{p.target}</p>
+                  <p className={s.planPrice}>{p.price}</p>
+                  <ul className={s.planFeatures}>
+                    {p.features.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                  <Link
+                    href={`/subscribe?plan=${p.id}`}
+                    className={`btn btn-block ${p.recommended ? 'btn-primary' : 'btn-outline'} ${s.planCta}`}
+                  >
+                    {p.contactOnly ? '도입 문의하기' : `${p.name} 시작하기`}
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 6. 역할 선택 */}
         <section className={s.section} id="role">
           <div className="wrap">
             <p className={s.sectionEyebrow}>START</p>
@@ -211,6 +249,7 @@ export default function LandingPage() {
           </p>
         </div>
       </footer>
+      <ChatBot />
     </>
   );
 }

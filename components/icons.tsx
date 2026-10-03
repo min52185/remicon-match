@@ -85,6 +85,14 @@ export const IconPin = (p: P) => (
   </svg>
 );
 
+/** 가격표 — 급처 매물 */
+export const IconTag = (p: P) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" {...p}>
+    <path d="M3 12V4h8l10 10-8 8z" />
+    <circle cx="7.5" cy="8.5" r="1.5" />
+  </svg>
+);
+
 export const IconDoc = (p: P) => (
   <svg viewBox="0 0 24 24" aria-hidden="true" {...p}>
     <path d="M6 3h8l4 4v14H6z" />

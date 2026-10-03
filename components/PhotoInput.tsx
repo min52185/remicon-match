@@ -25,6 +25,7 @@ export default function PhotoInput({
   onRemoved,
   height = 180,
   disabled,
+  placeholderSrc,
 }: {
   kind: PhotoKind;
   /** 올릴 때 쓸 경로 */
@@ -37,6 +38,8 @@ export default function PhotoInput({
   onRemoved?: () => void | Promise<void>;
   height?: number;
   disabled?: boolean;
+  /** 올린 사진이 없을 때 대신 보여 줄 그림 */
+  placeholderSrc?: string;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,6 +115,9 @@ export default function PhotoInput({
             alt={label}
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
           />
+        ) : placeholderSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={placeholderSrc} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
         ) : (
           <span style={{ fontSize: '0.84rem', color: 'var(--color-concrete-mid)' }}>
             {busy ? '올리는 중…' : '아직 사진이 없습니다'}

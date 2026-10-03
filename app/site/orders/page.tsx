@@ -27,19 +27,13 @@ import {
   type NoteDay,
 } from '@/lib/delivery-note';
 import { clock, dateClock, m3 } from '@/lib/format';
-import {
-  ORDER_STATUS_LABEL,
-  ORDER_TONE,
-  cementShort,
-  slumpLabel,
-  specCode,
-  strengthLabel,
-} from '@/lib/rules';
+import { ORDER_STATUS_LABEL, ORDER_TONE, cementShort } from '@/lib/rules';
 import { photoUrl } from '@/lib/services/photos';
 import { ordersOfSite, setOrderStatus } from '@/lib/store';
 import { useDb, useMounted } from '@/lib/store/hooks';
 import { useSeenNotes } from '@/lib/useSeenNotes';
 import type { Site } from '@/lib/types';
+import ns from './note-sheet.module.css';
 
 export default function OrdersPage() {
   return (
@@ -314,69 +308,171 @@ function NoteCard({
   );
 }
 
-/** 펼친 납품서 — 인쇄하면 이 모양 그대로 나간다 */
+/** 2026년 07월 28일 — 종이 납품서 머리의 날짜 */
+function paperDate(at: number) {
+  const d = new Date(at);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}년 ${p(d.getMonth() + 1)}월 ${p(d.getDate())}일`;
+}
+
+/** 08시 01분 — 아직 없는 시각이면 빈 칸으로 둔다 (종이에 손으로 채우는 칸처럼) */
+function paperTime(at: number | undefined) {
+  if (at == null) return '　　시　　분';
+  const d = new Date(at);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}시 ${p(d.getMinutes())}분`;
+}
+
+/** 6.00 */
+const paperM3 = (v: number) => v.toFixed(2);
+
+/** 종이 납품서 시방 배합표의 칸 */
+const MIX_COLUMNS = [
+  '시멘트',
+  '혼화재',
+  '굵은골재',
+  '잔골재',
+  '물',
+  '혼화제',
+  '물-결합재비 (%)',
+  '잔골재율 (%)',
+];
+
+/**
+ * 펼친 납품서 — 인쇄하면 이 모양 그대로 나간다.
+ * 칸 배치는 현장에서 받는 종이 레디믹스트 콘크리트 납품서(KS F 4009)를 따른다.
+ * 현장 사무는 종이 양식에 눈이 익어 있어서, 같은 칸이 같은 자리에 있어야 바로 읽는다.
+ */
 function NoteSheet({ note }: { note: DeliveryNote }) {
   return (
-    <div style={{ marginTop: 14, borderTop: '1px solid var(--color-line)', paddingTop: 14 }}>
-      <h3 style={{ fontSize: '1rem', margin: '0 0 2px' }}>레디믹스트 콘크리트 납품서</h3>
-      <p
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '0.8rem',
-          color: 'var(--color-concrete-mid)',
-          margin: '0 0 14px',
-        }}
-      >
-        {note.code} · {note.round}회차
-      </p>
+    <div>
+      <div className={ns.sheet}>
+        <div className={ns.head}>
+          <div className={ns.ks}>
+            <strong>KS</strong>
+            <br />
+            KS F 4009
+            <br />
+            레디믹스트 콘크리트
+          </div>
+          <h3 className={ns.title}>레디믹스트 콘크리트 납품서</h3>
+        </div>
 
-      <SheetGroup title="공급자">
-        <Row label="공장">{note.plantName}</Row>
-        <Row label="주소">{note.plantAddress}</Row>
-        <Row label="전화">{note.plantPhone || '—'}</Row>
-      </SheetGroup>
+        <div className={ns.addressee}>
+          <strong>{note.siteName} 귀하</strong>
+          <span>{paperDate(note.mixStartAt)}</span>
+        </div>
 
-      <SheetGroup title="수요자">
-        <Row label="현장">{note.siteName}</Row>
-        <Row label="주소">{note.siteAddress}</Row>
-      </SheetGroup>
+        <SheetRow label="NO.">
+          <span className={ns.num}>{note.code}</span>{' '}
+          <span className={ns.muted}>({note.round}회차)</span>
+        </SheetRow>
+        <SheetRow label="납품 장소">
+          {note.siteName}
+          {note.siteAddress && <span className={ns.muted}> · {note.siteAddress}</span>}
+        </SheetRow>
+        <SheetRow label="운반차 번호">
+          <span className={ns.split}>
+            <span className={ns.num}>{note.truckNo != null ? `${note.truckNo}호차` : '—'}</span>
+            <span>{note.plateNo || '—'}</span>
+            <span>{note.driverName || '—'}</span>
+          </span>
+        </SheetRow>
+        <SheetRow label="납품 시간">
+          <span className={ns.split}>
+            <span>
+              출발 <span className={ns.num}>{paperTime(note.departAt)}</span>
+            </span>
+            <span>
+              도착 <span className={ns.num}>{paperTime(note.arriveAt)}</span>
+            </span>
+          </span>
+        </SheetRow>
+        <SheetRow label="납품 용적">
+          <span className={ns.split}>
+            <span>
+              <span className={ns.num}>{paperM3(note.volumeM3)}</span> m³
+            </span>
+            <span>
+              누계 <span className={ns.num}>{paperM3(note.cumulativeM3)}</span> m³
+            </span>
+          </span>
+        </SheetRow>
 
-      <SheetGroup title="운반 차량">
-        <Row label="호차">{note.truckNo != null ? `${note.truckNo}호차` : '—'}</Row>
-        <Row label="차량번호">{note.plateNo || '—'}</Row>
-        <Row label="기사">{note.driverName || '—'}</Row>
-      </SheetGroup>
+        <SheetBlock title="호칭 방법">
+          <SheetCell head="콘크리트의 종류에 따른 구분">{note.spec.type} 콘크리트</SheetCell>
+          <SheetCell head="굵은골재 최대치수 (mm)" num>
+            {note.spec.aggMm}
+          </SheetCell>
+          <SheetCell head="호칭강도 (MPa)" num>
+            {note.spec.strength}
+          </SheetCell>
+          <SheetCell head={`${note.spec.slumpKind === 'flow' ? '슬럼프플로' : '슬럼프'} (mm)`} num>
+            {note.spec.slumpMm}
+          </SheetCell>
+          <SheetCell head="시멘트 종류에 따른 구분">{cementShort(note.spec.cement)}</SheetCell>
+        </SheetBlock>
 
-      <SheetGroup title="규격">
-        <Row label="종류">{note.spec.type}</Row>
-        <Row label="호칭">{specCode(note.spec)}</Row>
-        <Row label="강도">{strengthLabel(note.spec)}</Row>
-        <Row label="슬럼프">{slumpLabel(note.spec)}</Row>
-        <Row label="시멘트">{cementShort(note.spec.cement)}</Row>
-        <Row label="수량">{m3(note.volumeM3)}</Row>
-      </SheetGroup>
-
-      <SheetGroup title="시각">
-        <Row label="비비기 시작">{clock(note.mixStartAt)}</Row>
-        <Row label="공장 출발">{clock(note.departAt)}</Row>
-        <Row label="현장 도착">{clock(note.arriveAt)}</Row>
-        <Row label="타설 완료">{clock(note.completedAt)}</Row>
         {/*
-          확정 시각 = 기사가 하역 완료를 누른 시각이자 이 장이 현장으로 넘어온
-          시각이다. 사람이 손으로 적는 칸을 두지 않는다 — 틀리거나 비어 있기 마련이다.
+          배합표는 공장이 정하는 값이라 앱에 아직 없다. 지어내지 않고 칸만 둔다 —
+          공장 배합 자료가 연동되면 이 자리에 들어간다.
         */}
-        <Row label="납품서 확정">
-          {note.issued ? (
-            <>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>{clock(note.issuedAt)}</span>{' '}
-              <Tag tone="ok">현장 수신</Tag>
-            </>
-          ) : (
-            <Tag tone="info">아직 운반 중 — 하역 완료를 누르면 확정됩니다</Tag>
-          )}
-        </Row>
-      </SheetGroup>
+        <SheetBlock
+          title="시방 배합표 (kg/m³)"
+          caption="배합표는 공장 배합 자료가 연동되면 채워집니다."
+        >
+          {MIX_COLUMNS.map((h) => (
+            <SheetCell key={h} head={h}>
+              <span className={ns.muted}>—</span>
+            </SheetCell>
+          ))}
+        </SheetBlock>
 
+        <SheetRow label="지정 사항">
+          {note.orderNote || <span className={ns.muted}>—</span>}
+        </SheetRow>
+        <SheetRow label="비고">
+          {note.siteAccessNote && <div>{note.siteAccessNote}</div>}
+          <div>
+            타설 종료 <span className={ns.num}>{paperTime(note.completedAt)}</span>
+          </div>
+        </SheetRow>
+
+        {/*
+          인수자 확인 = 하역 완료를 누른 시각이자 이 장이 현장으로 넘어온 시각이다.
+          사람이 손으로 적는 칸을 두지 않는다 — 틀리거나 비어 있기 마련이다.
+        */}
+        <div className={`${ns.row} ${ns.confirm}`}>
+          <div>
+            <div className={ns.label}>인수자 확인</div>
+            <div className={ns.value}>
+              {note.issued ? (
+                <>
+                  <span className={ns.num}>{clock(note.issuedAt)}</span>{' '}
+                  <Tag tone="ok">현장 수신</Tag>
+                </>
+              ) : (
+                <Tag tone="info">하역 완료 전</Tag>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className={ns.label}>출하자 확인</div>
+            <div className={ns.value}>
+              {note.plantName}
+              <div className={ns.muted}>비비기 {clock(note.mixStartAt)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className={ns.foot}>
+          <strong>{note.plantName}</strong>
+          {note.plantAddress && <> · {note.plantAddress}</>}
+          {note.plantPhone && <> · (출하실) {note.plantPhone}</>}
+        </div>
+      </div>
+
+      <div style={{ height: 14 }} />
       <SheetGroup title="판정">
         <Row label="외기온도">{note.tempC}℃</Row>
         <Row label="제한시간">비비기~타설 완료 {note.limitMinutes}분</Row>
@@ -407,6 +503,55 @@ function NoteSheet({ note }: { note: DeliveryNote }) {
       >
         이 납품서 인쇄 · PDF 저장
       </button>
+    </div>
+  );
+}
+
+/** 납품서 한 줄 — 왼쪽 칸 이름, 오른쪽 내용 */
+function SheetRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className={ns.row}>
+      <div className={ns.label}>{label}</div>
+      <div className={ns.value}>{children}</div>
+    </div>
+  );
+}
+
+/** 칸이 여럿인 표 한 덩어리 — 호칭 방법, 시방 배합표 */
+function SheetBlock({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={ns.block}>
+      <div className={ns.blockTitle}>{title}</div>
+      <div className={ns.cellsWrap}>
+        <div className={ns.cells}>{children}</div>
+      </div>
+      {caption && <div className={ns.caption}>{caption}</div>}
+    </div>
+  );
+}
+
+/** 표 안의 칸 하나 — 위에 항목 이름, 아래에 값 */
+function SheetCell({
+  head,
+  num,
+  children,
+}: {
+  head: string;
+  num?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={ns.cell}>
+      <span className={ns.cellHead}>{head}</span>
+      <span className={num ? ns.num : undefined}>{children}</span>
     </div>
   );
 }
