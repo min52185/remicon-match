@@ -288,6 +288,7 @@ export async function dispatchTruck(input: DispatchInput): Promise<Delivery> {
     distanceKm: input.distanceKm,
     path: input.path,
     simSeed: input.simulate === false ? undefined : id,
+    initialSlumpMm: input.initialSlumpMm,
   };
 
   // 가짜 차량이면 "실제" 도착 시각을 지금 정한다 (교통 흐름 곡선 기준)

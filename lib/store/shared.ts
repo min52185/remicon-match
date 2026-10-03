@@ -78,6 +78,8 @@ export interface DispatchInput {
   prepMinutes?: number;
   /** 시연용 가짜 차량이면 true — 도착 시각을 미리 정해 둔다 */
   simulate?: boolean;
+  /** 공장이 적은 초기 슬럼프(mm) — 운반 중 슬럼프 추정의 출발점 */
+  initialSlumpMm?: number;
 }
 
 /* ==========================================================================

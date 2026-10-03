@@ -238,6 +238,11 @@ export interface Delivery {
    * 현장 서명이 들어간 종이가 증빙이라, 사진이 전자 납품서를 뒷받침한다.
    */
   notePhotoPath?: string;
+  /**
+   * 출하할 때 공장이 적은 초기 슬럼프(mm). 운반 중 슬럼프 추정의 출발점이다.
+   * 없으면 주문한 슬럼프로 본다.
+   */
+  initialSlumpMm?: number;
 }
 
 /** truck_locations — GPS 기록 */

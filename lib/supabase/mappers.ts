@@ -167,6 +167,8 @@ export interface DeliveryRow {
   path: [number, number][];
   delay_reason: string | null;
   sim_seed: string | null;
+  /** 0013 — SQL 을 안 돌린 DB 에는 없다 */
+  initial_slump_mm?: number | null;
 }
 
 export interface TruckLocationRow {
@@ -338,6 +340,7 @@ export function toDelivery(r: DeliveryRow, order?: Order): Delivery {
     delayReason: r.delay_reason ?? undefined,
     simSeed: r.sim_seed ?? undefined,
     notePhotoPath: r.note_photo_path ?? undefined,
+    initialSlumpMm: r.initial_slump_mm ?? undefined,
   };
 }
 

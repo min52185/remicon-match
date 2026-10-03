@@ -195,7 +195,7 @@ describe('이어서 물어볼 질문', () => {
 
   it('이어지는 질문은 방금 질문과 같은 주제 안에서만 고른다', () => {
     const TOPIC: Record<string, string> = {
-      delivery: '배송', truck: '배송', limitLeft: '배송', delayWhy: '배송', nextTruck: '배송',
+      delivery: '배송', truck: '배송', limitLeft: '배송', delayWhy: '배송', nextTruck: '배송', slump: '배송',
       order: '배송', orderTime: '배송', pour: '배송', pourFix: '배송', pourRemain: '배송',
       surplus: '급처', surplusPrice: '급처', surplusDeadline: '급처', surplusHow: '급처',
       plants: '공장', plantsInTime: '공장', plantsTrucks: '공장',
@@ -203,6 +203,7 @@ describe('이어서 물어볼 질문', () => {
     const asked = [
       '왜 안 와요', '3호차 어디야', '굳기 전까지 얼마나 남았어?', '왜 늦어?', '다음 차는 언제 와?',
       '주문 상태 알려줘', '몇 시 타설이야?', '타설 끊길 것 같아?', '콜드조인트 막으려면?', '남은 물량 얼마야?',
+      '지금 슬럼프 얼마야?', '3호차 슬럼프 얼마야?',
       '급처 매물 있어?', '급처 얼마나 싸?', '급처 몇 시까지 받아야 해?', '급처 어떻게 받아?',
       '근처 공장 어때?', '제한시간 안에 올 수 있는 공장은?', '공장마다 차 몇 대 남았어?',
     ];
@@ -334,6 +335,74 @@ describe('키 없이 답하기', () => {
     expect(offlineAnswer('공장마다 차 몇 대 남았어?', c)).toContain('가온 2대');
   });
 
+  it.each([
+    ['지금 슬럼프 얼마야?', 'slump'],
+    ['3호차 슬럼프 몇이야', 'slump'],
+    ['슬럼프 많이 떨어졌어?', 'slump'],
+    ['도착하면 슬럼프 얼마야?', 'slump'],
+    ['슬럼프가 뭐예요?', 'faq'],
+    ['슬럼프 플로가 뭐야?', 'faq'],
+  ])('슬럼프 질문 가리기: %s → %s', (q, intent) => {
+    expect(classify(q)).toBe(intent);
+  });
+
+  it('운반 중 슬럼프는 처음 값·지금 값·도착 때 값을 말하고, 하한 아래면 시험을 권한다', () => {
+    const base = {
+      plant: '가온',
+      spec: '',
+      phase: '운반 중',
+      eta: '09:40',
+      etaInMin: 20,
+      remainingKm: 9,
+      delay: '',
+      delayMin: 0,
+      limitSlackMin: 60,
+      limitMinutes: 120,
+      level: 'ok' as const,
+    };
+    const slump = {
+      initialMm: 180,
+      orderedMm: 150,
+      elapsedMin: 35,
+      nowMm: 168,
+      atArrivalMm: 150,
+      rateNow: 0.9,
+      phase: '유도기',
+      lowerMm: 125,
+      belowLower: false,
+      tempC: 22,
+    };
+    const c = ctx({
+      deliveries: [
+        { ...base, truck: '1호차', slump },
+        { ...base, truck: '3호차', slump: { ...slump, nowMm: 130, atArrivalMm: 118, belowLower: true } },
+      ],
+    });
+
+    const all = offlineAnswer('지금 슬럼프 얼마야?', c);
+    expect(all).toContain('1호차는 출발 35분째');
+    expect(all).toContain('처음 180mm에서 약 168mm');
+    expect(all).toContain('도착 예정 09:40에는 약 150mm');
+    expect(all).toContain('약산');
+
+    const three = offlineAnswer('3호차 슬럼프 얼마야?', c);
+    expect(three).not.toContain('1호차');
+    expect(three).toContain('하한 125mm 아래');
+    expect(three).toContain('슬럼프 시험');
+  });
+
+  it('슬럼프 플로 주문은 추정하지 않는다고 말한다', () => {
+    const c = ctx({
+      deliveries: [
+        {
+          truck: '1호차', plant: '', spec: '', phase: '운반 중', eta: '09:40', etaInMin: 20,
+          remainingKm: 9, delay: '', delayMin: 0, limitSlackMin: 60, limitMinutes: 120, level: 'ok',
+        },
+      ],
+    });
+    expect(offlineAnswer('지금 슬럼프 얼마야?', c)).toContain('플로');
+  });
+
   it('못 알아들으면 물어볼 수 있는 예시를 준다', () => {
     expect(offlineAnswer('오늘 점심 뭐 먹지', ctx())).toContain('왜 안 와요');
   });
@@ -351,6 +420,27 @@ describe('현장 상황 요약', () => {
       remainingKm: 0,
       limitSlackMin: 75,
     });
+  });
+
+  it('공장이 적은 초기 슬럼프에서 출발 뒤 시간만큼 뺀 슬럼프를 낸다', () => {
+    const d = db({ deliveries: [delivery({ id: 'd1', initialSlumpMm: 180 })] });
+    const s = buildSiteContext(d, SITE, at(35), 20).deliveries[0].slump!;
+    expect(s.initialMm).toBe(180);
+    expect(s.orderedMm).toBe(150);
+    expect(s.elapsedMin).toBe(30); // 출발 09:05 → 지금 09:35
+    expect(s.nowMm).toBeLessThan(180);
+    expect(s.tempC).toBe(20);
+  });
+
+  it('초기 슬럼프를 안 적었으면 주문 슬럼프에서 시작한다', () => {
+    const d = db({ deliveries: [delivery({ id: 'd1' })] });
+    expect(buildSiteContext(d, SITE, at(35), 20).deliveries[0].slump!.initialMm).toBe(150);
+  });
+
+  it('슬럼프 플로 주문은 추정하지 않는다', () => {
+    const flow = { ...ORDER, spec: { ...ORDER.spec, slumpKind: 'flow' as const, slumpMm: 500 } };
+    const d = db({ orders: [flow], deliveries: [delivery({ id: 'd1' })] });
+    expect(buildSiteContext(d, SITE, at(35), 20).deliveries[0].slump).toBeUndefined();
   });
 
   it('끝난 배송과 다른 현장 배송은 넣지 않는다', () => {
