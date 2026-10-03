@@ -27,7 +27,8 @@ import { getPosition } from '../services/tracking';
 import type { Db } from '../store/shared';
 import { offersForSite } from '../surplus';
 import type { Site } from '../types';
-import { analyzeDelay, monitorPour } from './predict';
+import { analyzeDelay, monitorPour, recommend } from './predict';
+import { estimateSlump } from './slump';
 
 /* ==========================================================================
  * 현장 상황 요약 — Claude 에 그대로 넘기는 JSON
@@ -53,6 +54,27 @@ export interface DeliveryFact {
   limitSlackMin: number;
   limitMinutes: number;
   level: 'ok' | 'warn' | 'bad';
+  /** 운반 중 슬럼프 약산 추정. 슬럼프 플로 주문이면 없다 */
+  slump?: SlumpFact;
+}
+
+export interface SlumpFact {
+  /** 공장이 적은 초기 슬럼프 (없으면 주문값) */
+  initialMm: number;
+  orderedMm: number;
+  /** 기사 출발 뒤 지난 분 */
+  elapsedMin: number;
+  nowMm: number;
+  /** 도착 예정 때 추정 — 이미 도착했으면 없다 */
+  atArrivalMm: number | null;
+  /** 지금 저하 속도 (mm/분) */
+  rateNow: number;
+  phase: string;
+  /** 주문 슬럼프 하한 (KS F 4009 허용차) */
+  lowerMm: number;
+  belowLower: boolean;
+  /** 추정에 쓴 기온 */
+  tempC: number;
 }
 
 export interface PourFact {
@@ -66,6 +88,8 @@ export interface PourFact {
   coldJointLimitMin: number;
   level: 'ok' | 'warn' | 'bad';
   message: string;
+  /** 위험할 때 할 일 — 타설 모니터의 권고 그대로 */
+  actions: string[];
 }
 
 export interface PlantFact {
@@ -85,6 +109,8 @@ export interface SurplusFact {
   normalPrice: number;
   discountPct: number;
   arrive: string;
+  /** 늦어도 이때까지 현장에 닿아야 한다 HH:MM */
+  deadline: string;
   slackMin: number;
   reachable: boolean;
 }
@@ -140,7 +166,35 @@ export function buildSiteContext(
     const etaAt = arrived ? (d.arriveAt ?? now) : (pos?.etaAt ?? d.etaCurrentAt);
     const delay = analyzeDelay(d);
 
+    // 슬럼프 — 기사 출발부터 잰다. 기온은 지금 현장 기온, 모르면 주문 때 기온
+    let slump: SlumpFact | undefined;
+    if (order && order.spec.slumpKind === 'slump') {
+      const slumpTempC = tempC ?? order.tempC;
+      const e = estimateSlump({
+        initialMm: d.initialSlumpMm ?? order.spec.slumpMm,
+        orderedMm: order.spec.slumpMm,
+        departAt: d.departAt,
+        arriveAt: etaAt,
+        arrived,
+        now,
+        tempC: slumpTempC,
+      });
+      slump = {
+        initialMm: e.initialMm,
+        orderedMm: e.orderedMm,
+        elapsedMin: e.elapsedMin,
+        nowMm: e.nowMm,
+        atArrivalMm: e.atArrivalMm,
+        rateNow: e.rateNow,
+        phase: e.phase,
+        lowerMm: e.lowerMm,
+        belowLower: e.belowLower,
+        tempC: slumpTempC,
+      };
+    }
+
     return {
+      slump,
       truck: truck ? `${truck.no}호차` : '차량',
       plant: plant?.name ?? '',
       spec: order ? specText(order.spec) : '',
@@ -178,6 +232,10 @@ export function buildSiteContext(
         coldJointLimitMin: m.coldJointLimitMin,
         level: m.level,
         message: m.message,
+        actions: recommend(
+          m,
+          db.plants.find((p) => p.id === order.plantId)?.availableTrucks ?? 0,
+        ).map((r) => r.action),
       },
     ];
   });
@@ -210,6 +268,7 @@ export function buildSiteContext(
       normalPrice: o.listing.unitPrice,
       discountPct: o.listing.discountPct,
       arrive: clock(o.arriveAt),
+      deadline: clock(o.deadlineAt),
       slackMin: o.slackMinutes,
       reachable: o.reachable,
     }));
@@ -254,10 +313,28 @@ const locationsOf = (db: Db, deliveryId: string) =>
 export type Intent =
   | 'smalltalk'
   | 'faq'
+  // 운반 중 슬럼프
+  | 'slump'
+  // 배송을 더 파고드는 질문
+  | 'limitLeft'
+  | 'delayWhy'
+  | 'nextTruck'
   | 'truck'
+  // 주문
+  | 'orderTime'
   | 'order'
   | 'delivery'
+  // 타설
+  | 'pourFix'
+  | 'pourRemain'
   | 'pour'
+  // 급처
+  | 'surplusPrice'
+  | 'surplusDeadline'
+  | 'surplusHow'
+  // 공장
+  | 'plantsInTime'
+  | 'plantsTrucks'
   | 'surplus'
   | 'plants'
   | 'general';
@@ -356,10 +433,31 @@ const normalize = (question: string) => question.replace(/[\s?!.~,]/g, '');
 export function classify(question: string): Intent {
   const q = normalize(question);
   if (/^(안녕|하이|hi|hello|반가)|고마|감사|수고|ㅎㅇ/i.test(q)) return 'smalltalk';
+  // "콜드조인트 막으려면?" 은 뜻이 아니라 할 일을 묻는다 — 지식보다 먼저 본다
+  if (/(콜드|끊|공백).*(막|대처|피하)/.test(q)) return 'pourFix';
   if (ASKS_MEANING.test(q) && findFaq(q)) return 'faq';
+  // "슬럼프가 뭐예요" 는 위에서 지식으로 갔다. 남은 "슬럼프 얼마야" 는 내 차의 지금 값이다
+  if (
+    /슬럼프(?!플로)/.test(q) &&
+    /얼마|지금|현재|몇|떨어|어때|괜찮|도착|호차|확인|변화|예상|빠졌|줄었/.test(q)
+  )
+    return 'slump';
+
+  // 넓은 질문보다 좁은 질문을 먼저 본다 — "급처 얼마나 싸?" 는 '급처' 이기 전에 '가격' 이다
+  if (/급처.*(얼마|가격|싸|싼)|얼마나싸/.test(q)) return 'surplusPrice';
+  if (/급처.*(언제까지|몇시까지|시한)/.test(q)) return 'surplusDeadline';
+  if (/급처.*(어떻게|받으려면|받는법|받는방법)/.test(q)) return 'surplusHow';
+  if (/올수있는공장|시간안에.*공장|제때.*공장/.test(q)) return 'plantsInTime';
+  if (/몇대|차몇|남은차/.test(q)) return 'plantsTrucks';
+  if (/남은물량|얼마나부었|부은물량|몇루베/.test(q)) return 'pourRemain';
+  if (/몇시타설|타설(시간|시작|몇시)/.test(q)) return 'orderTime';
+  if (/굳기전까지|여유|얼마나남|몇분남/.test(q)) return 'limitLeft';
+  if (/왜늦|늦는이유|늦어|지연/.test(q)) return 'delayWhy';
+  if (/다음차|다음트럭/.test(q)) return 'nextTruck';
+
   if (/\d+호차/.test(q)) return 'truck';
   if (/주문상태|수락|접수|거절|주문.*(됐|됬|확인|들어갔)|받아줬|받았/.test(q)) return 'order';
-  if (/콜드|이어치기|공백|끊기|끊길|끊겨|남은물량|얼마나부었|타설.*(괜찮|어때|상황)/.test(q)) return 'pour';
+  if (/콜드|이어치기|공백|끊기|끊길|끊겨|타설.*(괜찮|어때|상황)/.test(q)) return 'pour';
   if (/급처|매물|할인|싸|싼|저렴|남은레미콘/.test(q)) return 'surplus';
   if (/공장|근처|추천|어디서|업체|가까운/.test(q)) return 'plants';
   if (
@@ -393,6 +491,91 @@ function deliveryLine(d: DeliveryFact): string {
 
 const EXAMPLES = '"아까 주문한 거 왜 안 와요?", "근처 공장 어때?", "급처 매물 있어?", "슬럼프가 뭐예요?"';
 
+/* ==========================================================================
+ * 이어서 물어볼 질문
+ *
+ * 답한 뒤 입력칸 위에 띄운다. 여기 적는 질문은 전부 위의 classify 가 알아듣고
+ * 키 없이 답할 수 있는 것이어야 한다 — 누른 추천 질문에 "답하기 어려워요"가
+ * 나오면 안 된다. 테스트가 그것을 지킨다.
+ * ======================================================================== */
+
+export const SITE_STARTERS = ['아까 주문한 거 왜 안 와요?', '지금 근처 공장들 어때?', '급처 매물 있어?'];
+export const GENERAL_STARTERS = ['슬럼프가 뭐예요?', '제한시간이 뭐예요?', '콜드조인트가 뭐야?'];
+
+/** 지식 질문 다음에 이어 물을 것 — 내 현장 질문은 현장이 있을 때만 쓴다 */
+const FAQ_NEXT: Record<string, { general: string[]; site?: string[] }> = {
+  flow: { general: ['슬럼프가 뭐예요?', '규격 읽는 법 알려줘'] },
+  slump: { general: ['슬럼프 플로가 뭐야?', '규격 읽는 법 알려줘'], site: ['지금 슬럼프 얼마야?'] },
+  spec: { general: ['슬럼프가 뭐예요?', '슬럼프 플로가 뭐야?'], site: ['지금 근처 공장들 어때?'] },
+  coldjoint: { general: ['제한시간이 뭐예요?', '양생이 뭐야?'], site: ['콜드조인트 괜찮아?', '콜드조인트 막으려면?'] },
+  limit: { general: ['콜드조인트가 뭐야?'], site: ['굳기 전까지 얼마나 남았어?', '제한시간 안에 올 수 있는 공장은?'] },
+  curing: { general: ['콜드조인트가 뭐야?'] },
+  surplus: { general: ['제한시간이 뭐예요?'], site: ['급처 매물 있어?', '급처 얼마나 싸?'] },
+  allocate: { general: ['긴급주문이 뭐야?', '주문은 어떻게 해?'] },
+  urgent: { general: ['AI 배분이 뭐야?', '주문은 어떻게 해?'] },
+  note: { general: ['즐겨찾기는 어떻게 써?'], site: ['주문 상태 알려줘'] },
+  favorite: { general: ['주문은 어떻게 해?'] },
+  howto: { general: ['즐겨찾기는 어떻게 써?', '긴급주문이 뭐야?'], site: ['주문 상태 알려줘'] },
+};
+
+/**
+ * 방금 한 질문에 이어 물을 만한 질문 3개.
+ * 같은 질문은 다시 권하지 않는다.
+ */
+export function followUps(question: string, c: SiteContext | null): string[] {
+  const intent = classify(question);
+  const q = normalize(question);
+  const firstTruck = c?.deliveries[0]?.truck;
+
+  let next: string[];
+  if (intent === 'faq') {
+    const f = FAQ_NEXT[findFaq(q)!.id];
+    next = [...(c && f.site ? f.site : []), ...f.general];
+  } else if (!c || intent === 'smalltalk' || intent === 'general') {
+    next = c ? SITE_STARTERS : GENERAL_STARTERS;
+  } else {
+    // 방금 답을 한 단계 더 파고드는 질문 — 같은 주제 안에서만 고른다
+    const late = c.deliveries.some((d) => d.delayMin > 0);
+    const hasTrucks = c.deliveries.length > 0;
+    /** "3호차 어디야" 처럼 차를 콕 집어 물었으면 그 번호 */
+    const askedNo = q.match(/(\d+)호차/)?.[1];
+    const byIntent: Partial<Record<Intent, string[]>> = {
+      delivery: hasTrucks
+        ? [`${firstTruck} 어디야?`, late ? '왜 늦어?' : '지금 슬럼프 얼마야?', '굳기 전까지 얼마나 남았어?']
+        : ['주문 상태 알려줘', '몇 시 타설이야?'],
+      truck: [
+        askedNo ? `${askedNo}호차 슬럼프 얼마야?` : '지금 슬럼프 얼마야?',
+        late ? '왜 늦어?' : '다음 차는 언제 와?',
+        '굳기 전까지 얼마나 남았어?',
+      ],
+      slump: [
+        '슬럼프가 뭐예요?',
+        '굳기 전까지 얼마나 남았어?',
+        late ? '왜 늦어?' : '다음 차는 언제 와?',
+      ],
+      limitLeft: [late ? '왜 늦어?' : '다음 차는 언제 와?', '타설 끊길 것 같아?', '제한시간이 뭐예요?'],
+      delayWhy: ['굳기 전까지 얼마나 남았어?', '다음 차는 언제 와?', '타설 끊길 것 같아?'],
+      nextTruck: [firstTruck ? `${firstTruck} 어디야?` : '주문 상태 알려줘', '굳기 전까지 얼마나 남았어?', '남은 물량 얼마야?'],
+      order: ['몇 시 타설이야?', '아까 주문한 거 왜 안 와요?'],
+      orderTime: ['주문 상태 알려줘', '아까 주문한 거 왜 안 와요?'],
+      pour: ['콜드조인트 막으려면?', '남은 물량 얼마야?', '다음 차는 언제 와?'],
+      pourFix: ['다음 차는 언제 와?', '남은 물량 얼마야?', '콜드조인트가 뭐야?'],
+      pourRemain: ['다음 차는 언제 와?', '타설 끊길 것 같아?'],
+      surplus: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
+      surplusPrice: ['급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
+      surplusDeadline: ['급처 얼마나 싸?', '급처 어떻게 받아?'],
+      surplusHow: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?'],
+      plants: ['제한시간 안에 올 수 있는 공장은?', '공장마다 차 몇 대 남았어?'],
+      plantsInTime: ['공장마다 차 몇 대 남았어?', '지금 근처 공장들 어때?'],
+      plantsTrucks: ['제한시간 안에 올 수 있는 공장은?', '지금 근처 공장들 어때?'],
+    };
+    next = byIntent[intent] ?? SITE_STARTERS;
+  }
+
+  const asked = normalize(question);
+  return next.filter((x) => normalize(x) !== asked).slice(0, 3);
+}
+
 /**
  * 키 없이 답한다. 현장이 없으면(첫 화면) 일반 지식만 답한다.
  */
@@ -417,8 +600,147 @@ export function offlineAnswer(question: string, c: SiteContext | null): string {
   return templateAnswer(intent, c, question);
 }
 
+const NO_TRUCK = (c: SiteContext) => `지금 ${c.site}로 오고 있는 차가 없어요.`;
+const won = (v: number) => `${v.toLocaleString('ko-KR')}원`;
+
+/** 운반 중 슬럼프 한 대분 */
+function slumpLine(d: DeliveryFact): string {
+  const s = d.slump!;
+  const head =
+    s.elapsedMin === 0
+      ? `${d.truck}는 아직 출발 전이라 슬럼프가 처음 그대로 ${s.initialMm}mm예요.`
+      : `${d.truck}는 출발 ${s.elapsedMin}분째(${s.phase})라 슬럼프가 처음 ${s.initialMm}mm에서 약 ${s.nowMm}mm로 떨어졌을 거예요.`;
+  const arrival =
+    s.atArrivalMm != null ? ` 도착 예정 ${d.eta}에는 약 ${s.atArrivalMm}mm예요.` : '';
+  const why = ` 외기 ${s.tempC}℃ 기준으로 지금 분당 ${s.rateNow}mm씩 빠지고 있어요.`;
+  const judge = s.belowLower
+    ? ` 주문 ${s.orderedMm}mm의 하한 ${s.lowerMm}mm 아래로 떨어질 수 있어요. 받을 때 슬럼프 시험을 꼭 해 보세요.`
+    : ` 주문 ${s.orderedMm}mm의 허용 범위(${s.lowerMm}mm 이상) 안이에요.`;
+  return head + arrival + why + judge;
+}
+
 export function templateAnswer(intent: Intent, c: SiteContext, question = ''): string {
   switch (intent) {
+    case 'slump': {
+      if (c.deliveries.length === 0) return NO_TRUCK(c);
+      const no = normalize(question).match(/(\d+)호차/)?.[1];
+      const pick = no ? c.deliveries.filter((d) => d.truck === `${no}호차`) : c.deliveries;
+      if (no && pick.length === 0) return `지금 오고 있는 차 중에 ${no}호차는 없어요.`;
+      const known = pick.filter((d) => d.slump);
+      if (known.length === 0) {
+        return '슬럼프 플로 주문이라 운반 중 슬럼프는 추정하지 않아요. 현장에서 플로 시험으로 확인해 주세요.';
+      }
+      return (
+        known.slice(0, 3).map(slumpLine).join('\n') +
+        '\n(시간과 기온으로 잰 약산이라, 실제 값은 현장 슬럼프 시험으로 확인해 주세요.)'
+      );
+    }
+
+    /* ── 배송을 더 파고드는 질문 ── */
+    case 'limitLeft': {
+      if (c.deliveries.length === 0) return NO_TRUCK(c);
+      return c.deliveries
+        .slice(0, 3)
+        .map((d) =>
+          d.limitSlackMin >= 0
+            ? `${d.truck}는 굳기 전까지 ${d.limitSlackMin}분 남았어요(비비기부터 ${d.limitMinutes}분 제한).`
+            : `${d.truck}는 제한시간(${d.limitMinutes}분)을 ${-d.limitSlackMin}분 넘길 것 같아요. 공장에 바로 연락해 주세요.`,
+        )
+        .join('\n');
+    }
+
+    case 'delayWhy': {
+      if (c.deliveries.length === 0) return NO_TRUCK(c);
+      const late = c.deliveries.filter((d) => d.delayMin > 0);
+      if (late.length === 0) return '지금 늦는 차는 없어요. 모두 처음 예상한 시각대로 오고 있어요.';
+      return late
+        .slice(0, 3)
+        .map(
+          (d) =>
+            `${d.truck}는 ${d.delayReason ? `${d.delayReason} 때문에 ` : ''}처음 예상보다 ${d.delayMin}분 늦어졌어요. 지금 예상 도착은 ${d.eta}예요.`,
+        )
+        .join('\n');
+    }
+
+    case 'nextTruck': {
+      const next = c.deliveries.find((d) => d.etaInMin > 0);
+      if (!next) {
+        return c.deliveries.length > 0
+          ? '오고 있는 차는 모두 현장에 도착해 있어요. 더 올 차는 없어요.'
+          : NO_TRUCK(c);
+      }
+      return `다음 차는 ${next.truck}(${next.plant})예요. 약 ${next.etaInMin}분 뒤 ${next.eta}에 도착할 예정이에요.`;
+    }
+
+    /* ── 주문 ── */
+    case 'orderTime': {
+      if (c.orders.length === 0) return "진행 중인 주문이 없어요. '주문' 화면에서 새로 보낼 수 있어요.";
+      return c.orders
+        .slice(0, 3)
+        .map((o) => `${o.code}(${o.plant})는 ${o.pourStart}에 타설을 시작할 예정이에요.`)
+        .join('\n');
+    }
+
+    /* ── 타설 ── */
+    case 'pourRemain': {
+      const p = c.pours[0];
+      if (!p) return '지금 타설 중인 주문이 없어요.';
+      return `${p.order} 주문은 ${p.pouredM3}m³ 부었고 ${p.remainingM3}m³ 남았어요.`;
+    }
+
+    case 'pourFix': {
+      const p = c.pours[0];
+      if (!p) return '지금 타설 중인 주문이 없어서 막을 콜드조인트가 없어요.';
+      if (p.actions.length === 0) {
+        return `지금은 다음 차가 제때 와서 끊길 걱정이 없어요. ${p.message}`;
+      }
+      return `${p.message}\n이렇게 해 보세요: ${p.actions.join(' / ')}.`;
+    }
+
+    /* ── 급처 ── */
+    case 'surplusPrice': {
+      const ok = c.surplus.filter((s) => s.reachable);
+      if (ok.length === 0) return '지금 제시간에 받을 수 있는 급처 매물이 없어요.';
+      return ok
+        .map(
+          (s) =>
+            `${s.plant}: m³당 ${won(s.normalPrice)} → ${won(s.unitPrice)}(${s.discountPct}% 할인), ${s.volumeM3}m³ 전체 ${won(Math.round(s.unitPrice * s.volumeM3))}이에요.`,
+        )
+        .join('\n');
+    }
+
+    case 'surplusDeadline': {
+      const ok = c.surplus.filter((s) => s.reachable);
+      if (ok.length === 0) return '지금 제시간에 받을 수 있는 급처 매물이 없어요.';
+      return (
+        ok
+          .map(
+            (s) =>
+              `${s.plant} 매물은 늦어도 ${s.deadline}까지 현장에 닿아야 해요. 지금 받으면 ${s.arrive} 도착이라 ${s.slackMin}분 여유가 있어요.`,
+          )
+          .join('\n') + '\n이미 비빈 레미콘이라 시간이 지날수록 여유가 줄어요.'
+      );
+    }
+
+    case 'surplusHow':
+      return "'주문' 화면 맨 위 '급처 매물'에서 '이 매물 받기'를 누르고 한 번 더 확정하면, 그 공장으로 긴급 주문이 바로 가요. 제시간에 못 오는 매물은 버튼이 잠겨 있어요.";
+
+    /* ── 공장 ── */
+    case 'plantsInTime': {
+      const ok = c.plants.filter((p) => p.isOpen && p.inTime);
+      if (ok.length === 0) return '근처에 제한시간 안에 올 수 있는 공장이 없어요.';
+      return (
+        `제한시간 안에 올 수 있는 공장은 ${ok.map((p) => `${p.name}(${p.travelMin}분)`).join(', ')}이에요.` +
+        (c.limitMinutes ? ` 지금 기온이면 비비기부터 ${c.limitMinutes}분 안에 타설을 끝내야 해요.` : '')
+      );
+    }
+
+    case 'plantsTrucks': {
+      const open = c.plants.filter((p) => p.isOpen);
+      if (open.length === 0) return '근처에 지금 출하하는 공장이 없어요.';
+      return `가까운 순으로 ${open.map((p) => `${p.name} ${p.availableTrucks}대`).join(', ')} 남았어요.`;
+    }
+
     case 'truck': {
       const no = normalize(question).match(/(\d+)호차/)?.[1];
       const d = c.deliveries.find((x) => x.truck === `${no}호차`);
@@ -503,6 +825,7 @@ export const ASSISTANT_SYSTEM = `당신은 레미콘 매칭 앱 "레미go"의 �
 - 숫자를 늘어놓지 말고 "그래서 무엇을 하면 되는지"와 "왜 그런지"를 말합니다. 예: 공장을 추천하면 왜 그 공장인지(거리, 남은 차, 제한시간 여유).
 - 제한시간(비비기~타설 완료)을 넘길 위험이나 콜드조인트 위험이 있으면 먼저 말합니다.
 - 급처 매물은 이미 비빈 레미콘이라 싸지만 시간 여유가 짧다는 점을 함께 말합니다.
+- 배송의 slump 값은 출발 뒤 시간과 기온으로 잰 약산 추정입니다. 말할 때 "약"을 붙이고, 하한 아래로 떨어질 수 있으면 현장 슬럼프 시험을 권합니다.
 - 레미콘·타설 일반 지식(슬럼프, 이어치기, 양생 등)은 답해도 되지만, 현장 판단이 필요한 것은 책임기술자 확인을 권합니다.
 - 앱 화면 이름: 주문, 추적, 납품서, AI 배분, 즐겨찾기.`;
 

@@ -451,6 +451,20 @@ export async function dispatchTruck(input: DispatchInput): Promise<Delivery> {
     .single<DeliveryRow>();
   if (error || !data) throw error;
 
+  /*
+   * 초기 슬럼프는 0013 에서 생긴 칸이라 따로 적는다. 위 insert 에 넣으면 SQL 을
+   * 아직 안 돌린 DB 에서는 출하 지시 자체가 실패한다. 여기서 실패하면 슬럼프
+   * 추정만 주문 슬럼프로 대신하고 출하는 그대로 간다.
+   */
+  if (input.initialSlumpMm != null) {
+    const { error: slumpErr } = await sb
+      .from('deliveries')
+      .update({ initial_slump_mm: input.initialSlumpMm })
+      .eq('id', data.id);
+    if (slumpErr) console.warn('[store] 초기 슬럼프를 저장하지 못했습니다 (0013 미적용?)', slumpErr);
+    else data.initial_slump_mm = input.initialSlumpMm;
+  }
+
   // 출하하면 주문은 '납품 중'이 되고, 공장 재고가 줄어든다
   if (input.order.status === 'accepted') {
     await sb.from('orders').update({ status: 'delivering' }).eq('id', input.order.id);

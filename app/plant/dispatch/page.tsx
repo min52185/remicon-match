@@ -78,6 +78,14 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
   const deliveries = deliveriesOfOrder(db, order.id);
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [truckId, setTruckId] = useState('');
+  /**
+   * 이 차에 실은 레미콘의 초기 슬럼프. 운반 중 슬럼프가 떨어지는 만큼을 감안해
+   * 주문값보다 높게 내보내는 일이 많아서 공장이 직접 적는다. 기본값은 주문 슬럼프.
+   * 슬럼프 플로 주문은 손실 약산식이 맞지 않아 받지 않는다.
+   */
+  const isSlump = order.spec.slumpKind === 'slump';
+  const [initialSlump, setInitialSlump] = useState<number>(order.spec.slumpMm);
+  const slumpOk = !isSlump || (initialSlump > 0 && initialSlump <= 300);
   const [sending, setSending] = useState(false);
   // 같은 프레임의 두 번째 클릭을 막는다 — setState 는 다음 렌더에야 버튼을 잠근다
   const busyRef = useRef(false);
@@ -114,7 +122,7 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
     .find((_, i) => i === deliveries.length);
 
   async function send() {
-    if (busyRef.current || !route || !truckId || left <= 0) return;
+    if (busyRef.current || !route || !truckId || left <= 0 || !slumpOk) return;
     busyRef.current = true;
     setSending(true);
     setError(null);
@@ -130,8 +138,12 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
          * 보통은 출하 지시를 누른 순간이 비비기 시작이다. 그런데 급처 매물은
          * 공장이 벌써 비벼 둔 것이라 시계가 이미 돌고 있다. 그걸 지금 시작한
          * 것으로 찍으면 타설 기한이 실제보다 뒤로 밀려, 없는 여유가 생긴다.
+         *
+         * 슬럼프 추정도 이 시각부터 잰다 — 비빈 지 오래된 급처일수록 더 떨어져
+         * 있으므로, 지금 비빈 것으로 치면 실제보다 묽다고 말하게 된다.
          */
         mixStartAt: order.mixStartedAt ?? now,
+        initialSlumpMm: isSlump ? initialSlump : undefined,
       });
       setTruckId('');
     } catch (e) {
@@ -259,6 +271,23 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
               ))}
             </select>
           </label>
+          {isSlump && (
+            <label className="field">
+              <span className="label">
+                초기 슬럼프 (mm) — 주문 {order.spec.slumpMm}mm, 운반 중 떨어질 만큼 더 실어도 됩니다
+              </span>
+              <input
+                className="input"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={300}
+                step={5}
+                value={initialSlump}
+                onChange={(e) => setInitialSlump(Number(e.target.value))}
+              />
+            </label>
+          )}
           {error && (
             <p style={{ fontSize: '0.82rem', color: 'var(--color-bad)', margin: '0 0 8px' }}>
               {error}
@@ -267,7 +296,7 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
           <button
             type="button"
             className="btn btn-primary btn-block"
-            disabled={!truckId || !route || sending}
+            disabled={!truckId || !route || sending || !slumpOk}
             onClick={() => void send()}
           >
             {sending ? '출하 지시 중…' : `${m3(nextVolume)} 출하 지시 — 지금 비비기 시작`}

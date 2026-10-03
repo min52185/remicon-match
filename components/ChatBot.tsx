@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { buildSiteContext } from '@/lib/ai/assistant';
+import { GENERAL_STARTERS, SITE_STARTERS, buildSiteContext, followUps } from '@/lib/ai/assistant';
 import { askAssistant, type ChatTurn } from '@/lib/services/assistant';
 import { simClock } from '@/lib/services/clock';
 import { getTemperature } from '@/lib/services/weather';
@@ -20,8 +20,6 @@ import s from './ChatBot.module.css';
 
 const NAME = '레캉쌤';
 
-/** 현장 화면에서 바로 누를 수 있는 질문 */
-const SUGGESTIONS = ['아까 주문한 거 왜 안 와요?', '지금 근처 공장들 어때?', '급처 매물 있어?'];
 
 export default function ChatBot({ site: shellSite }: { site?: Site }) {
   const db = useDb();
@@ -45,6 +43,8 @@ export default function ChatBot({ site: shellSite }: { site?: Site }) {
   // 앱 화면 안에서는 말풍선이 화면을 가리지 않게 처음부터 접어 둔다
   const [bubbleHidden, setBubbleHidden] = useState(!!shellSite);
   const [messages, setMessages] = useState<ChatTurn[]>([]);
+  /** 방금 답한 질문에 이어 물을 것. 아직 묻기 전이면 null — 처음 질문을 보여 준다 */
+  const [next, setNext] = useState<string[] | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [tempC, setTempC] = useState<number | null>(null);
@@ -77,6 +77,7 @@ export default function ChatBot({ site: shellSite }: { site?: Site }) {
     const context = site ? buildSiteContext(db, site, simClock.now(), tempC) : null;
     const reply = await askAssistant(question, context, history);
     setMessages((m) => [...m, { role: 'assistant', text: reply.text }]);
+    setNext(followUps(question, context));
     setBusy(false);
   }
 
@@ -104,16 +105,6 @@ export default function ChatBot({ site: shellSite }: { site?: Site }) {
                 : '레미콘 주문이나 슬럼프, 타설 시간 같은 게 궁금하면 편하게 물어보세요.'}
             </p>
 
-            {site && messages.length === 0 && (
-              <div className={s.suggestions}>
-                {SUGGESTIONS.map((q) => (
-                  <button key={q} type="button" onClick={() => void send(q)}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {messages.map((m, i) =>
               m.role === 'user' ? (
                 <p key={i} className={s.userMsg}>
@@ -127,6 +118,18 @@ export default function ChatBot({ site: shellSite }: { site?: Site }) {
             )}
 
             {busy && <p className={`${s.botMsg} ${s.typing}`}>생각하는 중…</p>}
+          </div>
+
+          {/*
+            추천 질문 — 늘 입력칸 위에 둔다. 처음에는 대표 질문, 답한 뒤에는
+            방금 질문에 이어 물을 만한 것으로 바뀐다.
+          */}
+          <div className={s.suggestions} aria-label="이어서 물어볼 질문">
+            {(next ?? (site ? SITE_STARTERS : GENERAL_STARTERS)).map((q) => (
+              <button key={q} type="button" disabled={busy} onClick={() => void send(q)}>
+                {q}
+              </button>
+            ))}
           </div>
 
           <form
