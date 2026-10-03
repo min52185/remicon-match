@@ -80,6 +80,8 @@ function AllocateBody({ site }: { site: Site }) {
   const [safetyMarginMinutes, setSafety] = useState(DEFAULT_POUR_SETTINGS.safetyMarginMinutes);
   const [spec, setSpec] = useState<Spec>(DEFAULT_SPEC);
   const [showSpec, setShowSpec] = useState(false);
+  /** 사양이 KS F 4009 표에 없거나 범위를 벗어나면 그 이유. 있으면 계산을 막는다 */
+  const [specError, setSpecError] = useState<string | null>(null);
 
   const [result, setResult] = useState<AllocationResult | null>(null);
   const [naive, setNaive] = useState<NaiveResult | null>(null);
@@ -315,11 +317,21 @@ function AllocateBody({ site }: { site: Site }) {
             style={{ paddingLeft: 0 }}
           >
             {showSpec ? '▾' : '▸'} 레미콘 사양 — {specText(spec)}
+            {specError && ' ⚠'}
           </button>
           {showSpec && (
             <div style={{ marginTop: 12 }}>
-              <SpecPicker spec={spec} onChange={setSpec} />
+              <SpecPicker spec={spec} onChange={setSpec} onInvalid={setSpecError} />
             </div>
+          )}
+          {/*
+            접어 둔 채로 계산을 누를 수 있어서, 사양이 잘못돼도 배분이 그냥 돌았다.
+            펼치지 않은 사람에게도 왜 막혔는지는 보여야 하므로 접힘 여부와 무관하게 적는다.
+          */}
+          {specError && (
+            <p style={{ color: 'var(--color-bad)', fontSize: '0.82rem', margin: '8px 0 0' }}>
+              {specError}
+            </p>
           )}
         </div>
 
@@ -368,9 +380,9 @@ function AllocateBody({ site }: { site: Site }) {
           className="btn btn-primary btn-block"
           style={{ marginTop: 16 }}
           onClick={run}
-          disabled={running}
+          disabled={running || !!specError}
         >
-          {running ? '계산 중…' : 'AI 배분 계산하기'}
+          {running ? '계산 중…' : specError ? '사양을 고쳐 주세요' : 'AI 배분 계산하기'}
         </button>
       </Panel>
 
