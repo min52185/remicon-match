@@ -10,6 +10,7 @@ import {
   followUps,
   GENERAL_STARTERS,
   offlineAnswer,
+  plain,
   SITE_STARTERS,
   templateAnswer,
   type SiteContext,
@@ -115,6 +116,19 @@ describe('질문 종류 가리기', () => {
     ['오늘 점심 뭐 먹지', 'general'],
   ])('%s → %s', (q, intent) => {
     expect(classify(q)).toBe(intent);
+  });
+});
+
+describe('LLM 답 다듬기', () => {
+  it('마크다운 기호를 걷어 내고 글자만 남긴다', () => {
+    expect(plain('**가온레미콘**을 추천해요!\n\n\n\n**주문** 화면에서')).toBe(
+      '가온레미콘을 추천해요!\n\n주문 화면에서',
+    );
+    expect(plain('## 추천\n- 가온\n- 누리')).toBe('추천\n· 가온\n· 누리');
+  });
+
+  it('숫자 사이 곱셈 기호 같은 홑 별표는 건드리지 않는다', () => {
+    expect(plain('6 * 2 = 12m³')).toBe('6 * 2 = 12m³');
   });
 });
 
