@@ -24,6 +24,7 @@ import {
   IconSend,
   IconSliders,
   IconStar,
+  IconTag,
   IconTruck,
 } from './icons';
 import { Empty, Panel, Row } from './ui';
@@ -315,6 +316,7 @@ export function PlantShell({
       urgent: urgent.count > 0,
     },
     { href: '/plant/dispatch', label: '배차', icon: <IconSend />, badge: toDispatch },
+    { href: '/plant/surplus', label: '급처 매물', icon: <IconTag /> },
     { href: '/plant/register', label: '공장 등록', icon: <IconPin /> },
   ];
 

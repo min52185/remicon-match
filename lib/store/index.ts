@@ -56,6 +56,13 @@ export const saveNotePhoto = backend.saveNotePhoto;
 export const claimTruck = backend.claimTruck;
 export const releaseTruck = backend.releaseTruck;
 
+/* ── 급처 매물 ── */
+export type { NewSurplus } from './shared';
+export { SurplusGoneError } from './shared';
+export const createSurplus = backend.createSurplus;
+export const withdrawSurplus = backend.withdrawSurplus;
+export const claimSurplus = backend.claimSurplus;
+
 /* ── 등록 ── */
 export type { NewPlant, NewSite, NewTruck } from './shared';
 export const createSite = backend.createSite;

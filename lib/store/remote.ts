@@ -28,7 +28,10 @@ import {
   toPlanItem,
   toPlant,
   toSite,
+  toSurplus,
   toTruck,
+  surplusInsert,
+  type SurplusRow,
   type AllocationPlanRow,
   type DeliveryRow,
   type FavoriteMixRow,
@@ -49,16 +52,19 @@ import type {
   Order,
   OrderStatus,
   Plant,
+  SurplusListing,
   Truck,
   TruckLocation,
 } from '../types';
 import {
   emptyDb,
+  SurplusGoneError,
   type Db,
   type DispatchInput,
   type NewOrder,
   type NewPlant,
   type NewSite,
+  type NewSurplus,
   type NewTruck,
 } from './shared';
 
@@ -128,6 +134,7 @@ function start() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'plant_status' }, scheduleRefresh)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_items' }, scheduleRefresh)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'allocation_plans' }, scheduleRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'surplus_listings' }, scheduleRefresh)
     .subscribe();
 }
 
@@ -155,6 +162,15 @@ export async function refresh(): Promise<void> {
         // RLS 가 같은 회사까지만 열어 주므로, 남의 회사 기사는 여기 안 담긴다.
         sb.from('profiles').select('id, name, photo_path'),
       ]);
+
+    // 급처 매물은 0012 이후에 생긴 표라 따로 읽는다 — 아직 SQL 을 안 돌린 DB 에서도
+    // 나머지 화면은 그대로 돌아야 한다. 표가 없으면 빈 목록으로 둔다.
+    const surplusR = await sb.from('surplus_listings').select('*').order('created_at', {
+      ascending: false,
+    });
+    const surplus: SurplusListing[] = surplusR.error
+      ? []
+      : ((surplusR.data ?? []) as SurplusRow[]).map(toSurplus);
 
     const statusByPlant = new Map(
       ((statusR.data ?? []) as PlantStatusRow[]).map((r) => [r.plant_id, r]),
@@ -223,6 +239,7 @@ export async function refresh(): Promise<void> {
       plans,
       deliveries,
       truckLocations,
+      surplus,
       orderSeq: orders.length + 1,
       loaded: true,
     };
@@ -505,6 +522,53 @@ export async function markCompleted(deliveryId: string, at: number) {
   }
 
   await refresh();
+}
+
+/* ==========================================================================
+ * 급처 매물
+ * ======================================================================== */
+
+export async function createSurplus(input: NewSurplus): Promise<SurplusListing> {
+  const sb = client();
+  const { data, error } = await sb
+    .from('surplus_listings')
+    .insert(surplusInsert(input, await myId(sb)))
+    .select('*')
+    .single<SurplusRow>();
+  if (error) throw error;
+  await refresh();
+  return toSurplus(data);
+}
+
+export async function withdrawSurplus(listingId: string) {
+  const sb = client();
+  const { error } = await sb
+    .from('surplus_listings')
+    .update({ status: 'withdrawn' })
+    .eq('id', listingId)
+    .eq('status', 'open');
+  if (error) throw error;
+  await refresh();
+}
+
+/**
+ * 현장이 매물을 가져간다.
+ *
+ * 잠그는 일은 DB 함수 claim_surplus 가 한다(0012). 현장은 남의 회사 매물 행을
+ * 직접 고칠 권한이 없고, 두 현장이 동시에 눌러도 한 곳만 가져가야 해서다.
+ * 잠근 뒤에 주문을 보낸다 — 주문이 먼저 가면 못 가져간 현장의 주문이 남는다.
+ */
+export async function claimSurplus(
+  listingId: string,
+  _siteId: string,
+  order: NewOrder,
+  _now: number,
+): Promise<Order> {
+  const sb = client();
+  const { data, error } = await sb.rpc('claim_surplus', { listing_id: listingId });
+  if (error) throw error;
+  if (!data) throw new SurplusGoneError();
+  return createOrder(order);
 }
 
 /* ==========================================================================

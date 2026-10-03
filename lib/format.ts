@@ -55,6 +55,8 @@ export function delayText(delayMinutes: number) {
 }
 
 export const m3 = (v: number) => `${Math.round(v * 10) / 10}m³`;
+/** 72,000원 */
+export const won = (v: number) => `${Math.round(v).toLocaleString('ko-KR')}원`;
 export const km = (v: number) => `${Math.round(v * 10) / 10}km`;
 
 /** datetime-local 입력값 ↔ epoch */
