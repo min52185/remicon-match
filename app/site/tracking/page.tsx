@@ -95,6 +95,7 @@ function TrackingBody({ site }: { site: Site }) {
           label: `${truck?.no ?? '?'}호차 ${clock(t.d.etaCurrentAt)}`,
           tone: delay.level,
           heading: t.pos.heading,
+          avatar: '/assets/img/lecang-monkey.png',
         };
       }),
   ];

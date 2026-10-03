@@ -34,6 +34,8 @@ export interface MapMarker {
   onClick?: () => void;
   /** 진행 방향(도, 북 0). 주면 점 대신 화살표가 되어 그 방향을 가리킨다 */
   heading?: number;
+  /** 기사 사진. 주면 점·화살표 자리에 동그란 사진이 들어간다 */
+  avatar?: string;
 }
 
 export interface MapPath {
@@ -592,6 +594,21 @@ function paintMarker(el: HTMLElement, m: MapMarker) {
     el.style.removeProperty('--rmc-heading');
   }
 
+  let photo = el.querySelector<HTMLImageElement>('.rmc-avatar');
+  if (m.avatar) {
+    el.dataset.avatar = '1';
+    if (!photo) {
+      photo = document.createElement('img');
+      photo.className = 'rmc-avatar';
+      photo.alt = '';
+      el.insertBefore(photo, el.firstChild);
+    }
+    if (photo.getAttribute('src') !== m.avatar) photo.src = m.avatar;
+  } else {
+    delete el.dataset.avatar;
+    photo?.remove();
+  }
+
   let dot = el.querySelector<HTMLElement>('.dot');
   if (!dot) {
     dot = document.createElement('span');
@@ -715,6 +732,7 @@ function FallbackMap({
           data-selected={m.selected ? '1' : undefined}
           data-clickable={m.onClick ? '1' : undefined}
           data-heading={m.heading != null ? '1' : undefined}
+          data-avatar={m.avatar ? '1' : undefined}
           onClick={m.onClick}
           style={
             {
@@ -728,6 +746,10 @@ function FallbackMap({
             } as React.CSSProperties
           }
         >
+          {m.avatar && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="rmc-avatar" src={m.avatar} alt="" />
+          )}
           <span className="dot" />
           <span className="rmc-label">{m.label}</span>
         </div>
