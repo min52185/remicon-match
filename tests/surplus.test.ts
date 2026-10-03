@@ -154,3 +154,36 @@ describe('가져간 매물로 보내는 주문', () => {
     expect(n.note).toContain('90,000원');
   });
 });
+
+describe('급처로 생긴 주문 — 시계는 이미 돌고 있다', () => {
+  /**
+   * 급처는 공장이 벌써 비벼 둔 물건이다. 배차할 때 "지금 비비기 시작" 으로 찍으면
+   * 타설 기한이 실제보다 뒤로 밀려, 없는 여유를 있다고 말하게 된다.
+   * 아래 식이 화면(app/plant/dispatch)이 쓰는 그 식이다.
+   */
+  const mixStartFor = (order: { mixStartedAt?: number }, now: number) =>
+    order.mixStartedAt ?? now;
+
+  it('보통 주문은 출하 지시를 누른 때가 비비기 시작이다', () => {
+    const now = Date.UTC(2026, 9, 3, 8, 30);
+    expect(mixStartFor({}, now)).toBe(now);
+  });
+
+  it('급처 주문은 매물이 비벼진 때를 그대로 쓴다', () => {
+    const mixed = Date.UTC(2026, 9, 3, 8, 0);
+    const now = Date.UTC(2026, 9, 3, 8, 30);
+    expect(mixStartFor({ mixStartedAt: mixed }, now)).toBe(mixed);
+  });
+
+  it('그래서 타설 기한이 30분 앞당겨진다 — 이 차이가 사고를 막는다', () => {
+    const mixed = Date.UTC(2026, 9, 3, 8, 0);
+    const now = Date.UTC(2026, 9, 3, 8, 30);
+    const limitMs = 120 * 60_000;
+
+    const 틀린기한 = now + limitMs;
+    const 맞는기한 = mixStartFor({ mixStartedAt: mixed }, now) + limitMs;
+
+    expect(맞는기한).toBeLessThan(틀린기한);
+    expect((틀린기한 - 맞는기한) / 60_000).toBe(30);
+  });
+});

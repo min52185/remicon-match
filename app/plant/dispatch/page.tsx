@@ -126,7 +126,12 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
         distanceKm: route.distanceKm,
         path: route.path,
         volumeM3: nextVolume,
-        mixStartAt: now,
+        /*
+         * 보통은 출하 지시를 누른 순간이 비비기 시작이다. 그런데 급처 매물은
+         * 공장이 벌써 비벼 둔 것이라 시계가 이미 돌고 있다. 그걸 지금 시작한
+         * 것으로 찍으면 타설 기한이 실제보다 뒤로 밀려, 없는 여유가 생긴다.
+         */
+        mixStartAt: order.mixStartedAt ?? now,
       });
       setTruckId('');
     } catch (e) {
@@ -157,6 +162,19 @@ function DispatchCard({ order, plant }: { order: Order; plant: Plant }) {
         {order.tempC}℃ · 비비기~타설 완료{' '}
         {order.tempC >= RULES.HOT_THRESHOLD_C ? RULES.LIMIT_HOT_MIN : RULES.LIMIT_NORMAL_MIN}분
       </Row>
+      {/*
+        급처는 이미 비벼 둔 물건이다. 출하 지시를 누르는 순간이 비비기 시작인
+        보통 주문과 달리, 여기서는 시계가 벌써 돌고 있다는 것을 눌리기 전에 말한다.
+      */}
+      {order.surplusId && order.mixStartedAt != null && (
+        <Row label="급처 매물">
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{clock(order.mixStartedAt)}</span> 비비기
+          시작{' '}
+          <Tag tone="warn">
+            이미 {Math.max(0, Math.round((now - order.mixStartedAt) / MIN))}분 지남
+          </Tag>
+        </Row>
+      )}
       {/*
         출하 지시를 누르는 순간이 비비기 시작이고, 제한시간은 거기서부터 흐른다.
         주문 때 기온으로 굳은 제한이 지금도 맞는지는 여기서 봐야 한다.

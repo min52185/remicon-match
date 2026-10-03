@@ -106,6 +106,8 @@ export interface OrderRow {
   note: string | null;
   urgent: boolean | null;
   urgent_reason: string | null;
+  surplus_id: string | null;
+  mix_started_at: string | null;
   created_at: string;
 }
 
@@ -269,6 +271,8 @@ export const toOrder = (r: OrderRow): Order => ({
   note: r.note ?? undefined,
   urgent: r.urgent ?? false,
   urgentReason: r.urgent_reason ?? undefined,
+  surplusId: r.surplus_id ?? undefined,
+  mixStartedAt: ms(r.mix_started_at),
   createdAt: msReq(r.created_at),
 });
 
@@ -368,6 +372,8 @@ export const orderInsert = (o: Omit<Order, 'id' | 'createdAt'>, createdBy: strin
   note: o.note ?? null,
   urgent: o.urgent ?? false,
   urgent_reason: o.urgentReason ?? null,
+  surplus_id: o.surplusId ?? null,
+  mix_started_at: o.mixStartedAt ? iso(o.mixStartedAt) : null,
   created_by: createdBy,
 });
 
