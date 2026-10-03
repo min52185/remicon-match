@@ -126,6 +126,38 @@ describe('buildNote — 한 대가 한 장', () => {
     expect(buildNote(shuffled, shuffled.deliveries[1])!.round).toBe(1);
   });
 
+  it('누계는 이 주문에서 이 차까지 실은 물량이다', () => {
+    const three = db({
+      orders: [order({ id: 'o1', code: 'R-0929-001' })],
+      deliveries: [
+        delivery({ id: 'c', mixStartAt: at(40), volumeM3: 3.5 }),
+        delivery({ id: 'a', mixStartAt: at(0) }),
+        delivery({ id: 'b', mixStartAt: at(20) }),
+      ],
+    });
+    const byId = (id: string) => buildNote(three, three.deliveries.find((x) => x.id === id)!)!;
+    expect(byId('a').cumulativeM3).toBe(6);
+    expect(byId('b').cumulativeM3).toBe(12);
+    expect(byId('c').cumulativeM3).toBe(15.5);
+  });
+
+  it('비고에는 현장 진입 메모, 지정사항에는 주문 메모가 들어간다', () => {
+    const noted = db({
+      sites: [{ id: 's1', name: '서천동 현장', address: '', lat: 0, lng: 0, accessNote: '2번 게이트' }],
+      orders: [order({ id: 'o1', code: 'R-0929-001', note: '공기량 4.5±1.5%' })],
+      deliveries: [delivery({ id: 'd1', mixStartAt: at(0) })],
+    });
+    const n = buildNote(noted, noted.deliveries[0])!;
+    expect(n.siteAccessNote).toBe('2번 게이트');
+    expect(n.orderNote).toBe('공기량 4.5±1.5%');
+  });
+
+  it('메모가 없으면 빈 칸이다', () => {
+    const n = buildNote(base, base.deliveries[0])!;
+    expect(n.siteAccessNote).toBe('');
+    expect(n.orderNote).toBe('');
+  });
+
   it('주문이 없으면 납품서를 만들지 않는다', () => {
     const orphan = db({ orders: [], deliveries: [delivery({ id: 'd1', mixStartAt: at(0) })] });
     expect(buildNote(orphan, orphan.deliveries[0])).toBeNull();

@@ -36,8 +36,15 @@ export interface DeliveryNote {
   plateNo: string;
   driverName: string;
 
+  /** 현장 진입 메모 — 종이 납품서의 '비고' 칸 (예: 2번 게이트) */
+  siteAccessNote: string;
+  /** 주문 메모 — 종이 납품서의 '지정사항' 칸 */
+  orderNote: string;
+
   spec: Spec;
   volumeM3: number;
+  /** 누계 — 이 주문에서 이 차까지 실어 보낸 물량. 종이 납품서의 '누계' 칸 */
+  cumulativeM3: number;
   tempC: number;
 
   /** 비비기 시작 = 출하 시각. 납품서의 기준 시각이다. */
@@ -88,6 +95,9 @@ export function buildNote(db: Db, d: Delivery): DeliveryNote | null {
     .filter((x) => x.orderId === d.orderId)
     .sort((a, b) => a.mixStartAt - b.mixStartAt);
   const round = siblings.findIndex((x) => x.id === d.id) + 1;
+  // 소수 첫째 자리까지 — 6.0 + 6.0 + 3.5 를 더하다 생기는 부동소수 꼬리를 자른다
+  const cumulativeM3 =
+    Math.round(siblings.slice(0, round).reduce((s, x) => s + x.volumeM3, 0) * 10) / 10;
 
   return {
     deliveryId: d.id,
@@ -105,8 +115,12 @@ export function buildNote(db: Db, d: Delivery): DeliveryNote | null {
     plateNo: truck?.plateNo ?? '',
     driverName: truck?.driver ?? '',
 
+    siteAccessNote: site?.accessNote ?? '',
+    orderNote: order.note ?? '',
+
     spec: order.spec,
     volumeM3: d.volumeM3,
+    cumulativeM3,
     tempC: order.tempC,
 
     mixStartAt: d.mixStartAt,

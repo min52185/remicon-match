@@ -1,0 +1,198 @@
+/*
+ * 전자 납품서 — 현장에서 받는 종이 레디믹스트 콘크리트 납품서(KS F 4009) 칸 배치를 따른다.
+ * 현장 사무는 종이 양식에 눈이 익어 있어서, 같은 칸이 같은 자리에 있어야 바로 읽는다.
+ */
+
+.sheet {
+  margin-top: 14px;
+  border: 1.5px solid var(--color-concrete-dark);
+  background: var(--color-card);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+/* ---------- 머리 ---------- */
+.head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--color-concrete-dark);
+}
+
+.ks {
+  font-size: 0.62rem;
+  color: var(--color-concrete-mid);
+  line-height: 1.35;
+}
+
+.ks strong {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-concrete-dark);
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius-sharp);
+  padding: 0 4px;
+  margin-bottom: 2px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.02rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.addressee {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-concrete-dark);
+}
+
+.addressee strong {
+  font-size: 0.95rem;
+}
+
+.addressee span {
+  font-family: var(--font-mono);
+}
+
+/* ---------- 칸 ---------- */
+.row {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  border-bottom: 1px solid var(--color-line-strong);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.label {
+  padding: 6px 6px;
+  border-right: 1px solid var(--color-line-strong);
+  color: var(--color-concrete-wet);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+}
+
+.value {
+  padding: 6px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--color-concrete-mid);
+}
+
+.split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+}
+
+/* ---------- 호칭 방법 · 배합표 ---------- */
+/*
+ * 칸 하나에 항목 이름과 값을 같이 담는다. 화면이 좁으면 칸이 다음 줄로 넘어가는데,
+ * 이름과 값이 떨어지지 않아야 읽힌다.
+ * 칸마다 오른쪽·아래 선을 긋고, 바깥 테두리와 겹치는 마지막 선은 밖으로 밀어 감춘다 —
+ * 칸 수가 홀수여도 빈자리가 칠해지지 않는다.
+ */
+.cellsWrap {
+  overflow: hidden;
+  border-top: 1px solid var(--color-line-strong);
+}
+
+.cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  margin: 0 -1px -1px 0;
+}
+
+.cell {
+  border-right: 1px solid var(--color-line-strong);
+  border-bottom: 1px solid var(--color-line-strong);
+  padding: 5px 4px 6px;
+  text-align: center;
+  word-break: keep-all;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.cellHead {
+  font-size: 0.66rem;
+  line-height: 1.3;
+  color: var(--color-concrete-wet);
+}
+
+.block {
+  border-bottom: 1px solid var(--color-line-strong);
+}
+
+.blockTitle {
+  padding: 5px 8px;
+  font-weight: 600;
+  color: var(--color-concrete-wet);
+  letter-spacing: 0.04em;
+}
+
+.caption {
+  padding: 4px 8px 6px;
+  font-size: 0.68rem;
+  color: var(--color-concrete-mid);
+  border-top: 1px solid var(--color-line);
+}
+
+/* ---------- 확인 ---------- */
+.confirm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.confirm > div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+}
+
+.confirm > div + div {
+  border-left: 1px solid var(--color-line-strong);
+}
+
+/* ---------- 바닥 ---------- */
+.foot {
+  padding: 8px 10px;
+  border-top: 1px solid var(--color-concrete-dark);
+  font-size: 0.74rem;
+  color: var(--color-concrete-wet);
+}
+
+.foot strong {
+  color: var(--color-concrete-dark);
+}
+
+@media (max-width: 400px) {
+  .confirm {
+    grid-template-columns: 1fr;
+  }
+
+  .confirm > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--color-line-strong);
+  }
+}
