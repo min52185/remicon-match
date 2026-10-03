@@ -411,15 +411,6 @@ function AllocateBody({ site }: { site: Site }) {
             {/* 8·5제 — 5시를 넘기면 기사가 퇴근해 타설이 끊긴다 */}
             <WorkHourNotice startAt={result.pourStartAt} endAt={result.pourEndAt} />
             {result.feasible && (
-              <Row label="이동시간 합">
-                {result.totalTravelMinutes}분{' '}
-                <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--color-concrete-mid)' }}>
-                  (최소화한 목적함수 값)
-                </span>
-              </Row>
-            )}
-
-            {result.feasible && (
               <div style={{ overflowX: 'auto', marginTop: 14 }}>
                 <table className="table">
                   <thead>
