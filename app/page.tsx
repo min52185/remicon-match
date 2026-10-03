@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import ChatBot from '@/components/ChatBot';
 import { PLANS } from '@/lib/plans';
 import s from './landing.module.css';
 
@@ -248,6 +249,7 @@ export default function LandingPage() {
           </p>
         </div>
       </footer>
+      <ChatBot />
     </>
   );
 }
