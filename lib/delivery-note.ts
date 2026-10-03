@@ -52,6 +52,17 @@ export interface DeliveryNote {
   /** 제한시간 이내였나. 진행 중이면 null */
   within: boolean | null;
 
+  /**
+   * 확정됐나 — 기사가 하역 완료를 누른 순간 이 장은 더 못 바꾼다.
+   *
+   * 그 전까지 납품서는 "지금까지 이렇게 되고 있다" 는 진행 상황이고,
+   * 누른 뒤부터는 정산·품질 확인에 쓰는 증빙이다. 현장이 둘을 섞어 보면
+   * 아직 붓고 있는 차의 숫자를 확정된 값으로 읽게 된다.
+   */
+  issued: boolean;
+  /** 확정 시각 = 하역 완료를 누른 시각. 현장으로 보낸 시각이기도 하다 */
+  issuedAt?: number;
+
   /** 기사가 올린 종이 납품서 사진 */
   notePhotoPath?: string;
 }
@@ -106,6 +117,11 @@ export function buildNote(db: Db, d: Delivery): DeliveryNote | null {
     limitMinutes: d.limitMinutes,
     elapsedMin: d.completedAt ? Math.round((d.completedAt - d.mixStartAt) / MIN) : null,
     within: DeliveryRules.withinLimit(d),
+
+    // 하역 완료를 누른 시각이 곧 확정 시각이다. 따로 적는 칸을 두지 않는다 —
+    // 사람이 손으로 넣는 시각은 틀리거나 비어 있기 마련이다.
+    issued: d.completedAt != null,
+    issuedAt: d.completedAt,
 
     notePhotoPath: d.notePhotoPath,
   };
@@ -261,4 +277,19 @@ export function notesToCsv(notes: DeliveryNote[]): string {
   );
 
   return '﻿' + [CSV_COLUMNS.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}
+
+/* ==========================================================================
+ * 현장이 "새로 받은" 납품서
+ *
+ * 확정된 장만 받은 것으로 친다. 아직 붓고 있는 차의 장은 현장도 이미 추적
+ * 화면에서 보고 있으므로 새로 알릴 것이 없다.
+ * ======================================================================== */
+
+/** 확정된 장만 */
+export const issuedNotes = (notes: DeliveryNote[]) => notes.filter((n) => n.issued);
+
+/** 확정됐는데 아직 안 본 장 */
+export function unseenNotes(notes: DeliveryNote[], seen: ReadonlySet<string>): DeliveryNote[] {
+  return issuedNotes(notes).filter((n) => !seen.has(n.code));
 }

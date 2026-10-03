@@ -38,6 +38,7 @@ import {
 import { photoUrl } from '@/lib/services/photos';
 import { ordersOfSite, setOrderStatus } from '@/lib/store';
 import { useDb, useMounted } from '@/lib/store/hooks';
+import { useSeenNotes } from '@/lib/useSeenNotes';
 import type { Site } from '@/lib/types';
 
 export default function OrdersPage() {
@@ -57,7 +58,9 @@ function NotesBody({ site }: { site: Site }) {
   const mounted = useMounted();
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const days = useMemo(() => groupByDay(notesOfSite(db, site.id)), [db, site.id]);
+  const notes = useMemo(() => notesOfSite(db, site.id), [db, site.id]);
+  const days = useMemo(() => groupByDay(notes), [notes]);
+  const { freshCount, isFresh } = useSeenNotes(site.id, notes);
 
   if (!mounted) return <Empty>불러오는 중…</Empty>;
 
@@ -66,6 +69,20 @@ function NotesBody({ site }: { site: Site }) {
   return (
     <>
       <MockNotice />
+
+      {/*
+        기사가 하역 완료를 누르면 그 장이 확정돼 여기로 넘어온다.
+        몇 장이 새로 왔는지 먼저 말해 주지 않으면 매번 전부 훑어야 한다.
+      */}
+      {freshCount > 0 && (
+        <Panel style={{ borderWidth: 2, borderColor: 'var(--color-rust)' }}>
+          <strong style={{ fontSize: '0.94rem' }}>새 납품서 {freshCount}장</strong>
+          <p style={{ fontSize: '0.86rem', margin: '6px 0 0', lineHeight: 1.6 }}>
+            기사가 하역을 마치고 보낸 납품서입니다. 아래에서{' '}
+            <Tag tone="accent">새 납품서</Tag> 표시가 붙은 장을 확인하세요.
+          </p>
+        </Panel>
+      )}
 
       {total === 0 ? (
         <Panel>
@@ -83,6 +100,7 @@ function NotesBody({ site }: { site: Site }) {
             siteName={site.name}
             openId={openId}
             onToggle={(id) => setOpenId(openId === id ? null : id)}
+            isFresh={isFresh}
           />
         ))
       )}
@@ -180,11 +198,13 @@ function DaySection({
   siteName,
   openId,
   onToggle,
+  isFresh,
 }: {
   day: NoteDay;
   siteName: string;
   openId: string | null;
   onToggle: (id: string) => void;
+  isFresh: (code: string) => boolean;
 }) {
   function download() {
     const csv = notesToCsv(day.notes);
@@ -215,6 +235,7 @@ function DaySection({
           <NoteCard
             key={n.deliveryId}
             note={n}
+            fresh={isFresh(n.code)}
             open={openId === n.deliveryId}
             onToggle={() => onToggle(n.deliveryId)}
           />
@@ -242,10 +263,13 @@ function DaySection({
 
 function NoteCard({
   note,
+  fresh,
   open,
   onToggle,
 }: {
   note: DeliveryNote;
+  /** 이번에 처음 보는 확정 납품서인가 */
+  fresh: boolean;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -271,7 +295,9 @@ function NoteCard({
           <span style={{ fontSize: '0.82rem', color: 'var(--color-concrete-wet)' }}>
             {m3(note.volumeM3)} · {clock(note.mixStartAt)} 출하
           </span>
-          <span style={{ marginLeft: 'auto' }}>
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6 }}>
+            {/* 아직 안 본 장 — 기사가 하역 완료를 누른 뒤 넘어온 것 */}
+            {fresh && <Tag tone="accent">새 납품서</Tag>}
             {note.within == null ? (
               <Tag tone="info">진행 중</Tag>
             ) : note.within ? (
@@ -335,6 +361,20 @@ function NoteSheet({ note }: { note: DeliveryNote }) {
         <Row label="공장 출발">{clock(note.departAt)}</Row>
         <Row label="현장 도착">{clock(note.arriveAt)}</Row>
         <Row label="타설 완료">{clock(note.completedAt)}</Row>
+        {/*
+          확정 시각 = 기사가 하역 완료를 누른 시각이자 이 장이 현장으로 넘어온
+          시각이다. 사람이 손으로 적는 칸을 두지 않는다 — 틀리거나 비어 있기 마련이다.
+        */}
+        <Row label="납품서 확정">
+          {note.issued ? (
+            <>
+              <span style={{ fontFamily: 'var(--font-mono)' }}>{clock(note.issuedAt)}</span>{' '}
+              <Tag tone="ok">현장 수신</Tag>
+            </>
+          ) : (
+            <Tag tone="info">아직 운반 중 — 하역 완료를 누르면 확정됩니다</Tag>
+          )}
+        </Row>
       </SheetGroup>
 
       <SheetGroup title="판정">

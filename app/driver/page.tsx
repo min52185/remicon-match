@@ -17,6 +17,7 @@ import PhotoInput from '@/components/PhotoInput';
 import { DriverShell } from '@/components/RoleShells';
 import { Alert, Empty, MockNotice, Panel, Row, Stat, StatGrid, Tag } from '@/components/ui';
 import { siteQueue } from '@/lib/dashboard';
+import { buildNote } from '@/lib/delivery-note';
 import { clock, duration, failure, limitRemaining, m3, remaining } from '@/lib/format';
 import {
   DeliveryRules,
@@ -160,7 +161,7 @@ function DriverBody() {
 const SETTLE_MS = 700;
 
 interface DispatchChange {
-  tone: 'accent' | 'warn' | 'muted';
+  tone: 'accent' | 'warn' | 'muted' | 'ok';
   title: string;
   detail: string;
 }
@@ -230,9 +231,30 @@ function useDispatchChanges(open: Delivery[]) {
       }
     }
 
-    // 사라진 배차 — 취소됐거나 다른 차로 넘어갔다
+    /*
+     * 목록에서 빠진 배차.
+     *
+     * 빠지는 이유가 둘인데 예전에는 구분하지 않고 전부 "배차 취소" 라고 했다.
+     * 기사가 하역 완료를 누르면 그 배송은 open 에서 빠지므로, 제 손으로 끝낸
+     * 일에 "취소됐으니 레미콘사에 확인하세요" 가 떴다.
+     *
+     * 배송 자체가 남아 있고 완료 시각이 찍혀 있으면 끝난 것이고,
+     * 배송이 통째로 사라졌으면 그때가 진짜 취소다.
+     */
     for (const [id] of before) {
-      if (!nowMap.has(id)) {
+      if (nowMap.has(id)) continue;
+
+      const gone = db.deliveries.find((x) => x.id === id);
+      if (gone?.completedAt) {
+        const note = buildNote(db, gone);
+        found.push({
+          tone: 'ok',
+          title: '도착 완료',
+          detail: note
+            ? `${note.siteName} — 납품서 ${note.code} 를 ${clock(gone.completedAt)} 에 현장으로 보냈습니다.`
+            : `${clock(gone.completedAt)} 타설 완료로 기록했습니다.`,
+        });
+      } else {
         found.push({
           tone: 'muted',
           title: '배차 취소',
@@ -243,7 +265,7 @@ function useDispatchChanges(open: Delivery[]) {
 
     seen.current = nowMap;
     if (found.length > 0) setList((prev) => [...found, ...prev].slice(0, 5));
-  }, [signature, db.sites, db.trucks, db.orders]);
+  }, [signature, db]);
 
   return { list, dismiss: () => setList([]) };
 }

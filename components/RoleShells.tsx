@@ -29,7 +29,9 @@ import {
 import { Empty, Panel, Row } from './ui';
 import { useAuth } from '@/lib/auth';
 import { HOME_BY_ROLE, ROLE_LABEL } from '@/lib/routes';
-import { useDb, useSelection } from '@/lib/store/hooks';
+import { useDb, useMounted, useSelection } from '@/lib/store/hooks';
+import { notesOfSite, unseenNotes } from '@/lib/delivery-note';
+import { readSeen } from '@/lib/useSeenNotes';
 import { useUrgentAlert } from '@/lib/useUrgentAlert';
 import type { Plant, Role, Site } from '@/lib/types';
 import s from './AppShell.module.css';
@@ -136,13 +138,21 @@ export function SiteShell({ title, description, showClock, children, empty }: Sh
     (o) => o.siteId === site?.id && (o.status === 'requested' || o.status === 'accepted'),
   ).length;
 
+  /**
+   * 기사가 하역을 마치고 보낸 납품서 중 아직 안 본 것.
+   * 읽음 표시는 브라우저에만 있으므로 서버에서 그릴 때는 0 이고, 마운트 뒤에 채워진다.
+   */
+  const mounted = useMounted();
+  const freshNotes =
+    mounted && site ? unseenNotes(notesOfSite(db, site.id), readSeen(site.id)).length : 0;
+
   const tabs = [
     { href: '/site', label: '현황', icon: <IconGauge />, exact: true },
     { href: '/site/order', label: '주문', icon: <IconOrder /> },
     { href: '/site/favorites', label: '즐겨찾기', icon: <IconStar /> },
     { href: '/site/allocate', label: 'AI 배분', icon: <IconSliders /> },
     { href: '/site/tracking', label: '추적', icon: <IconTruck />, badge: pendingOrders },
-    { href: '/site/orders', label: '납품서', icon: <IconDoc /> },
+    { href: '/site/orders', label: '납품서', icon: <IconDoc />, badge: freshNotes },
     { href: '/site/sites', label: '현장', icon: <IconPin /> },
   ];
 
