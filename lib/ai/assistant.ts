@@ -27,7 +27,7 @@ import { getPosition } from '../services/tracking';
 import type { Db } from '../store/shared';
 import { offersForSite } from '../surplus';
 import type { Site } from '../types';
-import { analyzeDelay, monitorPour } from './predict';
+import { analyzeDelay, monitorPour, recommend } from './predict';
 
 /* ==========================================================================
  * 현장 상황 요약 — Claude 에 그대로 넘기는 JSON
@@ -66,6 +66,8 @@ export interface PourFact {
   coldJointLimitMin: number;
   level: 'ok' | 'warn' | 'bad';
   message: string;
+  /** 위험할 때 할 일 — 타설 모니터의 권고 그대로 */
+  actions: string[];
 }
 
 export interface PlantFact {
@@ -85,6 +87,8 @@ export interface SurplusFact {
   normalPrice: number;
   discountPct: number;
   arrive: string;
+  /** 늦어도 이때까지 현장에 닿아야 한다 HH:MM */
+  deadline: string;
   slackMin: number;
   reachable: boolean;
 }
@@ -178,6 +182,10 @@ export function buildSiteContext(
         coldJointLimitMin: m.coldJointLimitMin,
         level: m.level,
         message: m.message,
+        actions: recommend(
+          m,
+          db.plants.find((p) => p.id === order.plantId)?.availableTrucks ?? 0,
+        ).map((r) => r.action),
       },
     ];
   });
@@ -210,6 +218,7 @@ export function buildSiteContext(
       normalPrice: o.listing.unitPrice,
       discountPct: o.listing.discountPct,
       arrive: clock(o.arriveAt),
+      deadline: clock(o.deadlineAt),
       slackMin: o.slackMinutes,
       reachable: o.reachable,
     }));
@@ -254,10 +263,26 @@ const locationsOf = (db: Db, deliveryId: string) =>
 export type Intent =
   | 'smalltalk'
   | 'faq'
+  // 배송을 더 파고드는 질문
+  | 'limitLeft'
+  | 'delayWhy'
+  | 'nextTruck'
   | 'truck'
+  // 주문
+  | 'orderTime'
   | 'order'
   | 'delivery'
+  // 타설
+  | 'pourFix'
+  | 'pourRemain'
   | 'pour'
+  // 급처
+  | 'surplusPrice'
+  | 'surplusDeadline'
+  | 'surplusHow'
+  // 공장
+  | 'plantsInTime'
+  | 'plantsTrucks'
   | 'surplus'
   | 'plants'
   | 'general';
@@ -356,10 +381,25 @@ const normalize = (question: string) => question.replace(/[\s?!.~,]/g, '');
 export function classify(question: string): Intent {
   const q = normalize(question);
   if (/^(안녕|하이|hi|hello|반가)|고마|감사|수고|ㅎㅇ/i.test(q)) return 'smalltalk';
+  // "콜드조인트 막으려면?" 은 뜻이 아니라 할 일을 묻는다 — 지식보다 먼저 본다
+  if (/(콜드|끊|공백).*(막|대처|피하)/.test(q)) return 'pourFix';
   if (ASKS_MEANING.test(q) && findFaq(q)) return 'faq';
+
+  // 넓은 질문보다 좁은 질문을 먼저 본다 — "급처 얼마나 싸?" 는 '급처' 이기 전에 '가격' 이다
+  if (/급처.*(얼마|가격|싸|싼)|얼마나싸/.test(q)) return 'surplusPrice';
+  if (/급처.*(언제까지|몇시까지|시한)/.test(q)) return 'surplusDeadline';
+  if (/급처.*(어떻게|받으려면|받는법|받는방법)/.test(q)) return 'surplusHow';
+  if (/올수있는공장|시간안에.*공장|제때.*공장/.test(q)) return 'plantsInTime';
+  if (/몇대|차몇|남은차/.test(q)) return 'plantsTrucks';
+  if (/남은물량|얼마나부었|부은물량|몇루베/.test(q)) return 'pourRemain';
+  if (/몇시타설|타설(시간|시작|몇시)/.test(q)) return 'orderTime';
+  if (/굳기전까지|여유|얼마나남|몇분남/.test(q)) return 'limitLeft';
+  if (/왜늦|늦는이유|늦어|지연/.test(q)) return 'delayWhy';
+  if (/다음차|다음트럭/.test(q)) return 'nextTruck';
+
   if (/\d+호차/.test(q)) return 'truck';
   if (/주문상태|수락|접수|거절|주문.*(됐|됬|확인|들어갔)|받아줬|받았/.test(q)) return 'order';
-  if (/콜드|이어치기|공백|끊기|끊길|끊겨|남은물량|얼마나부었|타설.*(괜찮|어때|상황)/.test(q)) return 'pour';
+  if (/콜드|이어치기|공백|끊기|끊길|끊겨|타설.*(괜찮|어때|상황)/.test(q)) return 'pour';
   if (/급처|매물|할인|싸|싼|저렴|남은레미콘/.test(q)) return 'surplus';
   if (/공장|근처|추천|어디서|업체|가까운/.test(q)) return 'plants';
   if (
@@ -409,15 +449,15 @@ const FAQ_NEXT: Record<string, { general: string[]; site?: string[] }> = {
   flow: { general: ['슬럼프가 뭐예요?', '규격 읽는 법 알려줘'] },
   slump: { general: ['슬럼프 플로가 뭐야?', '규격 읽는 법 알려줘', '제한시간이 뭐예요?'] },
   spec: { general: ['슬럼프가 뭐예요?', '슬럼프 플로가 뭐야?'], site: ['지금 근처 공장들 어때?'] },
-  coldjoint: { general: ['제한시간이 뭐예요?', '양생이 뭐야?'], site: ['콜드조인트 괜찮아?'] },
-  limit: { general: ['콜드조인트가 뭐야?', '긴급주문이 뭐야?'], site: ['지금 근처 공장들 어때?'] },
-  curing: { general: ['콜드조인트가 뭐야?', '슬럼프가 뭐예요?'] },
-  surplus: { general: ['제한시간이 뭐예요?'], site: ['급처 매물 있어?', '지금 근처 공장들 어때?'] },
-  allocate: { general: ['긴급주문이 뭐야?', '주문은 어떻게 해?'], site: ['지금 근처 공장들 어때?'] },
-  urgent: { general: ['AI 배분이 뭐야?', '제한시간이 뭐예요?'], site: ['지금 근처 공장들 어때?'] },
-  note: { general: ['즐겨찾기는 어떻게 써?', '주문은 어떻게 해?'], site: ['주문 상태 알려줘'] },
-  favorite: { general: ['주문은 어떻게 해?', '납품서가 뭐야?'] },
-  howto: { general: ['즐겨찾기는 어떻게 써?', '긴급주문이 뭐야?', 'AI 배분이 뭐야?'] },
+  coldjoint: { general: ['제한시간이 뭐예요?', '양생이 뭐야?'], site: ['콜드조인트 괜찮아?', '콜드조인트 막으려면?'] },
+  limit: { general: ['콜드조인트가 뭐야?'], site: ['굳기 전까지 얼마나 남았어?', '제한시간 안에 올 수 있는 공장은?'] },
+  curing: { general: ['콜드조인트가 뭐야?'] },
+  surplus: { general: ['제한시간이 뭐예요?'], site: ['급처 매물 있어?', '급처 얼마나 싸?'] },
+  allocate: { general: ['긴급주문이 뭐야?', '주문은 어떻게 해?'] },
+  urgent: { general: ['AI 배분이 뭐야?', '주문은 어떻게 해?'] },
+  note: { general: ['즐겨찾기는 어떻게 써?'], site: ['주문 상태 알려줘'] },
+  favorite: { general: ['주문은 어떻게 해?'] },
+  howto: { general: ['즐겨찾기는 어떻게 써?', '긴급주문이 뭐야?'], site: ['주문 상태 알려줘'] },
 };
 
 /**
@@ -436,15 +476,31 @@ export function followUps(question: string, c: SiteContext | null): string[] {
   } else if (!c || intent === 'smalltalk' || intent === 'general') {
     next = c ? SITE_STARTERS : GENERAL_STARTERS;
   } else {
-    const byIntent: Record<string, string[]> = {
-      delivery: [firstTruck ? `${firstTruck} 어디야?` : '주문 상태 알려줘', '타설 끊길 것 같아?', '제한시간이 뭐예요?'],
-      truck: ['다른 차는 언제 와?', '콜드조인트 괜찮아?', '제한시간이 뭐예요?'],
-      order: ['아까 주문한 거 왜 안 와요?', '지금 근처 공장들 어때?', '긴급주문이 뭐야?'],
-      pour: ['콜드조인트가 뭐야?', '아까 주문한 거 왜 안 와요?', '급처 매물 있어?'],
-      surplus: ['급처가 뭐야?', '지금 근처 공장들 어때?', '제한시간이 뭐예요?'],
-      plants: ['급처 매물 있어?', 'AI 배분이 뭐야?', '긴급주문이 뭐야?'],
+    // 방금 답을 한 단계 더 파고드는 질문 — 같은 주제 안에서만 고른다
+    const late = c.deliveries.some((d) => d.delayMin > 0);
+    const hasTrucks = c.deliveries.length > 0;
+    const byIntent: Partial<Record<Intent, string[]>> = {
+      delivery: hasTrucks
+        ? [`${firstTruck} 어디야?`, late ? '왜 늦어?' : '다음 차는 언제 와?', '굳기 전까지 얼마나 남았어?']
+        : ['주문 상태 알려줘', '몇 시 타설이야?'],
+      truck: [late ? '왜 늦어?' : '다음 차는 언제 와?', '굳기 전까지 얼마나 남았어?', '타설 끊길 것 같아?'],
+      limitLeft: [late ? '왜 늦어?' : '다음 차는 언제 와?', '타설 끊길 것 같아?', '제한시간이 뭐예요?'],
+      delayWhy: ['굳기 전까지 얼마나 남았어?', '다음 차는 언제 와?', '타설 끊길 것 같아?'],
+      nextTruck: [firstTruck ? `${firstTruck} 어디야?` : '주문 상태 알려줘', '굳기 전까지 얼마나 남았어?', '남은 물량 얼마야?'],
+      order: ['몇 시 타설이야?', '아까 주문한 거 왜 안 와요?'],
+      orderTime: ['주문 상태 알려줘', '아까 주문한 거 왜 안 와요?'],
+      pour: ['콜드조인트 막으려면?', '남은 물량 얼마야?', '다음 차는 언제 와?'],
+      pourFix: ['다음 차는 언제 와?', '남은 물량 얼마야?', '콜드조인트가 뭐야?'],
+      pourRemain: ['다음 차는 언제 와?', '타설 끊길 것 같아?'],
+      surplus: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
+      surplusPrice: ['급처 몇 시까지 받아야 해?', '급처 어떻게 받아?'],
+      surplusDeadline: ['급처 얼마나 싸?', '급처 어떻게 받아?'],
+      surplusHow: ['급처 얼마나 싸?', '급처 몇 시까지 받아야 해?'],
+      plants: ['제한시간 안에 올 수 있는 공장은?', '공장마다 차 몇 대 남았어?'],
+      plantsInTime: ['공장마다 차 몇 대 남았어?', '지금 근처 공장들 어때?'],
+      plantsTrucks: ['제한시간 안에 올 수 있는 공장은?', '지금 근처 공장들 어때?'],
     };
-    next = byIntent[intent];
+    next = byIntent[intent] ?? SITE_STARTERS;
   }
 
   const asked = normalize(question);
@@ -475,8 +531,116 @@ export function offlineAnswer(question: string, c: SiteContext | null): string {
   return templateAnswer(intent, c, question);
 }
 
+const NO_TRUCK = (c: SiteContext) => `지금 ${c.site}로 오고 있는 차가 없어요.`;
+const won = (v: number) => `${v.toLocaleString('ko-KR')}원`;
+
 export function templateAnswer(intent: Intent, c: SiteContext, question = ''): string {
   switch (intent) {
+    /* ── 배송을 더 파고드는 질문 ── */
+    case 'limitLeft': {
+      if (c.deliveries.length === 0) return NO_TRUCK(c);
+      return c.deliveries
+        .slice(0, 3)
+        .map((d) =>
+          d.limitSlackMin >= 0
+            ? `${d.truck}는 굳기 전까지 ${d.limitSlackMin}분 남았어요(비비기부터 ${d.limitMinutes}분 제한).`
+            : `${d.truck}는 제한시간(${d.limitMinutes}분)을 ${-d.limitSlackMin}분 넘길 것 같아요. 공장에 바로 연락해 주세요.`,
+        )
+        .join('\n');
+    }
+
+    case 'delayWhy': {
+      if (c.deliveries.length === 0) return NO_TRUCK(c);
+      const late = c.deliveries.filter((d) => d.delayMin > 0);
+      if (late.length === 0) return '지금 늦는 차는 없어요. 모두 처음 예상한 시각대로 오고 있어요.';
+      return late
+        .slice(0, 3)
+        .map(
+          (d) =>
+            `${d.truck}는 ${d.delayReason ? `${d.delayReason} 때문에 ` : ''}처음 예상보다 ${d.delayMin}분 늦어졌어요. 지금 예상 도착은 ${d.eta}예요.`,
+        )
+        .join('\n');
+    }
+
+    case 'nextTruck': {
+      const next = c.deliveries.find((d) => d.etaInMin > 0);
+      if (!next) {
+        return c.deliveries.length > 0
+          ? '오고 있는 차는 모두 현장에 도착해 있어요. 더 올 차는 없어요.'
+          : NO_TRUCK(c);
+      }
+      return `다음 차는 ${next.truck}(${next.plant})예요. 약 ${next.etaInMin}분 뒤 ${next.eta}에 도착할 예정이에요.`;
+    }
+
+    /* ── 주문 ── */
+    case 'orderTime': {
+      if (c.orders.length === 0) return "진행 중인 주문이 없어요. '주문' 화면에서 새로 보낼 수 있어요.";
+      return c.orders
+        .slice(0, 3)
+        .map((o) => `${o.code}(${o.plant})는 ${o.pourStart}에 타설을 시작할 예정이에요.`)
+        .join('\n');
+    }
+
+    /* ── 타설 ── */
+    case 'pourRemain': {
+      const p = c.pours[0];
+      if (!p) return '지금 타설 중인 주문이 없어요.';
+      return `${p.order} 주문은 ${p.pouredM3}m³ 부었고 ${p.remainingM3}m³ 남았어요.`;
+    }
+
+    case 'pourFix': {
+      const p = c.pours[0];
+      if (!p) return '지금 타설 중인 주문이 없어서 막을 콜드조인트가 없어요.';
+      if (p.actions.length === 0) {
+        return `지금은 다음 차가 제때 와서 끊길 걱정이 없어요. ${p.message}`;
+      }
+      return `${p.message}\n이렇게 해 보세요: ${p.actions.join(' / ')}.`;
+    }
+
+    /* ── 급처 ── */
+    case 'surplusPrice': {
+      const ok = c.surplus.filter((s) => s.reachable);
+      if (ok.length === 0) return '지금 제시간에 받을 수 있는 급처 매물이 없어요.';
+      return ok
+        .map(
+          (s) =>
+            `${s.plant}: m³당 ${won(s.normalPrice)} → ${won(s.unitPrice)}(${s.discountPct}% 할인), ${s.volumeM3}m³ 전체 ${won(Math.round(s.unitPrice * s.volumeM3))}이에요.`,
+        )
+        .join('\n');
+    }
+
+    case 'surplusDeadline': {
+      const ok = c.surplus.filter((s) => s.reachable);
+      if (ok.length === 0) return '지금 제시간에 받을 수 있는 급처 매물이 없어요.';
+      return (
+        ok
+          .map(
+            (s) =>
+              `${s.plant} 매물은 늦어도 ${s.deadline}까지 현장에 닿아야 해요. 지금 받으면 ${s.arrive} 도착이라 ${s.slackMin}분 여유가 있어요.`,
+          )
+          .join('\n') + '\n이미 비빈 레미콘이라 시간이 지날수록 여유가 줄어요.'
+      );
+    }
+
+    case 'surplusHow':
+      return "'주문' 화면 맨 위 '급처 매물'에서 '이 매물 받기'를 누르고 한 번 더 확정하면, 그 공장으로 긴급 주문이 바로 가요. 제시간에 못 오는 매물은 버튼이 잠겨 있어요.";
+
+    /* ── 공장 ── */
+    case 'plantsInTime': {
+      const ok = c.plants.filter((p) => p.isOpen && p.inTime);
+      if (ok.length === 0) return '근처에 제한시간 안에 올 수 있는 공장이 없어요.';
+      return (
+        `제한시간 안에 올 수 있는 공장은 ${ok.map((p) => `${p.name}(${p.travelMin}분)`).join(', ')}이에요.` +
+        (c.limitMinutes ? ` 지금 기온이면 비비기부터 ${c.limitMinutes}분 안에 타설을 끝내야 해요.` : '')
+      );
+    }
+
+    case 'plantsTrucks': {
+      const open = c.plants.filter((p) => p.isOpen);
+      if (open.length === 0) return '근처에 지금 출하하는 공장이 없어요.';
+      return `가까운 순으로 ${open.map((p) => `${p.name} ${p.availableTrucks}대`).join(', ')} 남았어요.`;
+    }
+
     case 'truck': {
       const no = normalize(question).match(/(\d+)호차/)?.[1];
       const d = c.deliveries.find((x) => x.truck === `${no}호차`);

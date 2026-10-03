@@ -193,6 +193,46 @@ describe('이어서 물어볼 질문', () => {
     expect(followUps('왜 안 와요', withTruck)).toContain('3호차 어디야?');
   });
 
+  it('이어지는 질문은 방금 질문과 같은 주제 안에서만 고른다', () => {
+    const TOPIC: Record<string, string> = {
+      delivery: '배송', truck: '배송', limitLeft: '배송', delayWhy: '배송', nextTruck: '배송',
+      order: '배송', orderTime: '배송', pour: '배송', pourFix: '배송', pourRemain: '배송',
+      surplus: '급처', surplusPrice: '급처', surplusDeadline: '급처', surplusHow: '급처',
+      plants: '공장', plantsInTime: '공장', plantsTrucks: '공장',
+    };
+    const asked = [
+      '왜 안 와요', '3호차 어디야', '굳기 전까지 얼마나 남았어?', '왜 늦어?', '다음 차는 언제 와?',
+      '주문 상태 알려줘', '몇 시 타설이야?', '타설 끊길 것 같아?', '콜드조인트 막으려면?', '남은 물량 얼마야?',
+      '급처 매물 있어?', '급처 얼마나 싸?', '급처 몇 시까지 받아야 해?', '급처 어떻게 받아?',
+      '근처 공장 어때?', '제한시간 안에 올 수 있는 공장은?', '공장마다 차 몇 대 남았어?',
+    ];
+    for (const q of asked) {
+      const topic = TOPIC[classify(q)];
+      expect(topic, q).toBeDefined();
+      for (const next of followUps(q, site)) {
+        const t = TOPIC[classify(next)];
+        // 지식 질문(제한시간이 뭐예요 등)은 같은 주제의 설명이라 허용한다
+        if (classify(next) !== 'faq') expect(t, `${q} → ${next}`).toBe(topic);
+      }
+    }
+  });
+
+  it.each([
+    ['굳기 전까지 얼마나 남았어?', 'limitLeft'],
+    ['왜 늦어?', 'delayWhy'],
+    ['다음 차는 언제 와?', 'nextTruck'],
+    ['몇 시 타설이야?', 'orderTime'],
+    ['남은 물량 얼마야?', 'pourRemain'],
+    ['콜드조인트 막으려면?', 'pourFix'],
+    ['급처 얼마나 싸?', 'surplusPrice'],
+    ['급처 몇 시까지 받아야 해?', 'surplusDeadline'],
+    ['급처 어떻게 받아?', 'surplusHow'],
+    ['제한시간 안에 올 수 있는 공장은?', 'plantsInTime'],
+    ['공장마다 차 몇 대 남았어?', 'plantsTrucks'],
+  ])('파고드는 질문: %s → %s', (q, intent) => {
+    expect(classify(q)).toBe(intent);
+  });
+
   it('지식 질문 다음에는 관련 지식을 권한다', () => {
     expect(followUps('슬럼프가 뭐예요?', null)).toContain('슬럼프 플로가 뭐야?');
     expect(followUps('콜드조인트가 뭐야?', site)).toContain('콜드조인트 괜찮아?');
@@ -261,6 +301,37 @@ describe('키 없이 답하기', () => {
       orders: [{ code: 'R-1003-001', plant: '가온', status: '출하 대기', volumeM3: 12, pourStart: '10:00' }],
     });
     expect(offlineAnswer('왜 안 와요', c)).toContain('R-1003-001');
+  });
+
+  it('파고드는 질문에도 숫자 그대로 답한다', () => {
+    const truck = {
+      plant: '가온',
+      spec: '',
+      phase: '운반 중',
+      eta: '09:20',
+      etaInMin: 20,
+      remainingKm: 9,
+      delay: '',
+      limitMinutes: 120,
+      level: 'ok' as const,
+    };
+    const c = ctx({
+      deliveries: [
+        { ...truck, truck: '1호차', delayMin: 0, limitSlackMin: 70 },
+        { ...truck, truck: '3호차', delayMin: 6, delayReason: '공사 구간', limitSlackMin: 45 },
+      ],
+      plants: [
+        { name: '가온', travelMin: 12, availableTrucks: 2, isOpen: true, inTime: true },
+        { name: '먼곳', travelMin: 95, availableTrucks: 5, isOpen: true, inTime: false },
+      ],
+    });
+    expect(offlineAnswer('굳기 전까지 얼마나 남았어?', c)).toContain('3호차는 굳기 전까지 45분');
+    const why = offlineAnswer('왜 늦어?', c);
+    expect(why).toContain('공사 구간 때문에');
+    expect(why).not.toContain('1호차');
+    expect(offlineAnswer('다음 차는 언제 와?', c)).toContain('1호차');
+    expect(offlineAnswer('제한시간 안에 올 수 있는 공장은?', c)).not.toContain('먼곳');
+    expect(offlineAnswer('공장마다 차 몇 대 남았어?', c)).toContain('가온 2대');
   });
 
   it('못 알아들으면 물어볼 수 있는 예시를 준다', () => {
@@ -404,6 +475,7 @@ describe('키가 없을 때의 답', () => {
           normalPrice: 90000,
           discountPct: 20,
           arrive: '09:30',
+          deadline: '10:10',
           slackMin: 40,
           reachable: true,
         },
