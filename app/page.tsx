@@ -44,6 +44,29 @@ const WHY = [
   },
 ];
 
+// 가격은 사업성 검토 후 확정한다 — 그 전까지 금액 대신 안내 문구를 둔다
+const PLANS = [
+  {
+    name: '베이직',
+    target: '소규모 현장 · 처음 쓰는 곳',
+    price: '출시 시 공개',
+    features: ['레미콘 주문 · 즐겨찾기 배합', '실시간 배송 추적 · 도착 예정', '전자 납품서'],
+  },
+  {
+    name: '프로',
+    target: '타설이 잦은 중규모 현장',
+    price: '출시 시 공개',
+    recommended: true,
+    features: ['베이직의 모든 기능', 'AI 다공장 배분 추천', '타설 모니터 · 콜드조인트 경고'],
+  },
+  {
+    name: '엔터프라이즈',
+    target: '여러 현장을 운영하는 건설사',
+    price: '별도 협의',
+    features: ['프로의 모든 기능', '급처 매칭 우선 배정', '현장 통합 관리 · 공급 품질 리포트'],
+  },
+];
+
 const ROLES = [
   {
     href: '/site',
@@ -64,6 +87,7 @@ export default function LandingPage() {
           </Link>
           <nav className={s.nav} aria-label="주요 메뉴">
             <a href="#process">소개</a>
+            <a href="#pricing">요금제</a>
             <Link href="/site/order">주문</Link>
             <Link href="/site/tracking">배송 추적</Link>
             <Link href="/site/allocate">AI 배분</Link>
@@ -169,7 +193,36 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* 5. 역할 선택 */}
+        {/* 5. 요금제 */}
+        <section className={s.section} id="pricing">
+          <div className="wrap">
+            <p className={s.sectionEyebrow}>PRICING</p>
+            <h2 className={s.sectionTitle}>현장 규모에 맞춰, 세 가지 구독</h2>
+            <p className={s.pricingLead}>
+              한 번 결제하면 정해진 기간 동안 주문 횟수 제한 없이 씁니다. 레미콘사는 무료로 입점합니다.
+            </p>
+            <div className={s.planGrid}>
+              {PLANS.map((p) => (
+                <article
+                  key={p.name}
+                  className={`${s.planCard} ${p.recommended ? s.planRecommended : ''}`}
+                >
+                  {p.recommended && <span className={s.whyTag}>추천</span>}
+                  <h3>{p.name}</h3>
+                  <p className={s.planTarget}>{p.target}</p>
+                  <p className={s.planPrice}>{p.price}</p>
+                  <ul className={s.planFeatures}>
+                    {p.features.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 6. 역할 선택 */}
         <section className={s.section} id="role">
           <div className="wrap">
             <p className={s.sectionEyebrow}>START</p>
